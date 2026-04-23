@@ -2,9 +2,7 @@ package com.sezzle.sdk
 
 import android.net.Uri
 import com.sezzle.sdk.checkout.CheckoutHandler
-import com.sezzle.sdk.checkout.CheckoutState
 import com.sezzle.sdk.models.SezzleError
-import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -26,60 +24,51 @@ class URLParsingTest {
 
     @Before
     fun setUp() {
-        CheckoutState.listener = listener
-        CheckoutState.orderUUID = "test-order-uuid"
-        CheckoutState.checkoutInProgress = true
         completedUUID = null
         cancelled = false
         error = null
     }
 
-    @After
-    fun tearDown() {
-        CheckoutState.clear()
-    }
-
     @Test
     fun `confirmed URL triggers onCheckoutComplete`() {
         val uri = Uri.parse("sezzle-sdk://checkout/confirmed")
-        val handled = CheckoutHandler.handleCallbackUrl(uri)
-        assertTrue(handled)
+        CheckoutHandler.handleCallbackUri(uri, "test-order-uuid", listener)
+        assertEquals("test-order-uuid", completedUUID)
     }
 
     @Test
     fun `cancelled URL triggers onCheckoutCancel`() {
         val uri = Uri.parse("sezzle-sdk://checkout/cancelled")
-        val handled = CheckoutHandler.handleCallbackUrl(uri)
-        assertTrue(handled)
+        CheckoutHandler.handleCallbackUri(uri, "test-order-uuid", listener)
+        assertTrue(cancelled)
     }
 
     @Test
-    fun `unknown path returns handled but triggers error`() {
+    fun `unknown path triggers error`() {
         val uri = Uri.parse("sezzle-sdk://checkout/unknown")
-        val handled = CheckoutHandler.handleCallbackUrl(uri)
-        assertTrue(handled)
+        CheckoutHandler.handleCallbackUri(uri, "test-order-uuid", listener)
+        assertTrue(error is SezzleError.InvalidResponse)
     }
 
     @Test
-    fun `wrong scheme returns false`() {
-        val uri = Uri.parse("https://checkout/confirmed")
-        val handled = CheckoutHandler.handleCallbackUrl(uri)
-        assertFalse(handled)
-    }
-
-    @Test
-    fun `wrong host returns false`() {
+    fun `wrong host triggers error`() {
         val uri = Uri.parse("sezzle-sdk://unknown/confirmed")
-        val handled = CheckoutHandler.handleCallbackUrl(uri)
-        assertFalse(handled)
+        CheckoutHandler.handleCallbackUri(uri, "test-order-uuid", listener)
+        assertTrue(error is SezzleError.InvalidResponse)
     }
 
     @Test
-    fun `clears checkout state after handling`() {
+    fun `confirmed URL passes correct orderUUID`() {
         val uri = Uri.parse("sezzle-sdk://checkout/confirmed")
-        CheckoutHandler.handleCallbackUrl(uri)
-        assertNull(CheckoutState.listener)
-        assertNull(CheckoutState.orderUUID)
-        assertFalse(CheckoutState.checkoutInProgress)
+        CheckoutHandler.handleCallbackUri(uri, "my-uuid-123", listener)
+        assertEquals("my-uuid-123", completedUUID)
+    }
+
+    @Test
+    fun `cancelled URL does not return orderUUID`() {
+        val uri = Uri.parse("sezzle-sdk://checkout/cancelled")
+        CheckoutHandler.handleCallbackUri(uri, "test-order-uuid", listener)
+        assertNull(completedUUID)
+        assertTrue(cancelled)
     }
 }

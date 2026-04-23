@@ -3,6 +3,7 @@ package com.sezzle.sdk
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
+import androidx.activity.ComponentActivity
 import com.sezzle.sdk.checkout.CheckoutHandler
 import com.sezzle.sdk.checkout.CheckoutState
 import com.sezzle.sdk.models.SezzleCheckout
@@ -49,13 +50,12 @@ object SezzleSDK {
     /**
      * Start a Sezzle checkout.
      *
-     * Opens the Sezzle checkout in a Chrome Custom Tab. When the user completes,
-     * cancels, or encounters an error, the appropriate [listener] method is called
-     * on the main thread.
+     * Opens the Sezzle checkout in a secure browser tab. Uses Auth Tab (Chrome 137+)
+     * when available for best session handling, or falls back to Custom Tabs on older browsers.
      *
      * @param checkout The customer and order data for this checkout.
-     * @param activity The activity to launch the Custom Tab from.
-     * @param listener Receives checkout completion, cancellation, or error callbacks.
+     * @param activity The activity to launch from. Must extend [ComponentActivity].
+     * @param listener Receives checkout completion, cancellation, or error callbacks on the main thread.
      */
     fun startCheckout(
         checkout: SezzleCheckout,
@@ -69,12 +69,19 @@ object SezzleSDK {
             return
         }
 
+        val componentActivity = activity as? ComponentActivity
+        if (componentActivity == null) {
+            listener.onCheckoutError(SezzleError.NotConfigured)
+            return
+        }
+
+        // Register lifecycle callbacks for Custom Tab fallback dismiss detection
         registerLifecycleCallbacks(activity)
 
         val httpClient = HttpClient(key, env)
         val sessionService = SessionService(httpClient)
         val handler = CheckoutHandler(sessionService)
-        handler.startCheckout(checkout, activity, listener)
+        handler.startCheckout(checkout, componentActivity, listener)
     }
 
     /** Whether the SDK has been configured. */
@@ -82,12 +89,9 @@ object SezzleSDK {
         get() = publicKey != null && environment != null
 
     /**
-     * Register Activity lifecycle callbacks to detect browser dismiss.
-     *
-     * When the user presses back in the Custom Tab (instead of completing/cancelling),
-     * SezzleRedirectActivity is never triggered. We detect this by watching the
-     * launching Activity's onResume — if CheckoutState is still pending, it means
-     * the browser was dismissed.
+     * Lifecycle callbacks for Custom Tab fallback dismiss detection.
+     * When Auth Tab is used, this is not needed (Auth Tab has its own result callback).
+     * But when falling back to Custom Tabs, we detect browser dismiss via onResume.
      */
     private fun registerLifecycleCallbacks(activity: Activity) {
         if (lifecycleCallbacksRegistered) return
@@ -96,21 +100,19 @@ object SezzleSDK {
         activity.application.registerActivityLifecycleCallbacks(
             object : Application.ActivityLifecycleCallbacks {
                 override fun onActivityResumed(activity: Activity) {
-                    // If a checkout was in progress and the redirect activity didn't handle it,
-                    // the user dismissed the browser (back press / swipe)
-                    if (CheckoutState.checkoutInProgress) {
+                    // Only applies to the Custom Tab fallback path
+                    if (CheckoutState.listener != null) {
                         val listener = CheckoutState.listener
                         CheckoutState.clear()
                         listener?.onCheckoutError(SezzleError.BrowserDismissed)
                     }
                 }
-
-                override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
-                override fun onActivityStarted(activity: Activity) {}
-                override fun onActivityPaused(activity: Activity) {}
-                override fun onActivityStopped(activity: Activity) {}
-                override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
-                override fun onActivityDestroyed(activity: Activity) {}
+                override fun onActivityCreated(a: Activity, s: Bundle?) {}
+                override fun onActivityStarted(a: Activity) {}
+                override fun onActivityPaused(a: Activity) {}
+                override fun onActivityStopped(a: Activity) {}
+                override fun onActivitySaveInstanceState(a: Activity, s: Bundle) {}
+                override fun onActivityDestroyed(a: Activity) {}
             }
         )
     }

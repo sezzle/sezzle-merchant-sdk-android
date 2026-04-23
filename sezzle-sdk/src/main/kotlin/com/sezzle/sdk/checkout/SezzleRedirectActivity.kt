@@ -5,35 +5,40 @@ import android.content.Intent
 import android.os.Bundle
 
 /**
- * Transparent activity that catches sezzle-sdk://checkout/ redirects.
+ * Fallback redirect handler for browsers that don't support Auth Tab (Chrome < 137).
  *
- * Declared in the SDK's AndroidManifest.xml with an intent-filter for the
- * sezzle-sdk scheme. Auto-merges into the merchant's manifest.
+ * Catches sezzle-sdk://checkout/ redirects via intent-filter,
+ * dispatches to the checkout listener, and navigates back to the
+ * launching activity to clear the Custom Tab from the back stack.
  *
- * This activity parses the redirect URL, dispatches to the checkout listener,
- * navigates back to the launching activity (clearing the Custom Tab from
- * the back stack), and finishes itself.
+ * When Auth Tab IS supported, this activity is never used — the result
+ * comes directly via ActivityResultLauncher.
  */
 class SezzleRedirectActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Read the launching activity BEFORE handleCallbackUrl clears the state
-        val activityClass = CheckoutState.launchingActivityClass
+        // Read launching activity BEFORE handleCallbackUrl clears the state
+        val launchingClassName = CheckoutState.launchingActivityClassName
 
         val uri = intent?.data
         if (uri != null) {
-            CheckoutHandler.handleCallbackUrl(uri)
+            val listener = CheckoutState.listener
+            val orderUUID = CheckoutState.orderUUID
+            if (listener != null && orderUUID != null) {
+                CheckoutState.clear()
+                CheckoutHandler.handleCallbackUri(uri, orderUUID, listener)
+            }
         }
 
-        // Navigate back to the activity that started checkout, clearing the
-        // Chrome Custom Tab from the back stack. Without this, pressing back
-        // from the result screen would reopen the Custom Tab.
-        if (activityClass != null) {
-            val backIntent = Intent(this, activityClass)
-            backIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            startActivity(backIntent)
+        // Navigate back to the launching activity, clearing Custom Tab from back stack
+        if (launchingClassName != null) {
+            try {
+                val backIntent = Intent(this, Class.forName(launchingClassName))
+                backIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                startActivity(backIntent)
+            } catch (_: ClassNotFoundException) { }
         }
 
         finish()

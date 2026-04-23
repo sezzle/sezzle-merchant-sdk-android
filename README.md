@@ -4,7 +4,7 @@ Let your customers pay with Sezzle directly in your Android app. The SDK handles
 
 ## Requirements
 
-- Android API 21+ (Android 5.0 Lollipop)
+- Android API 23+ (Android 6.0 Marshmallow)
 - Android Gradle Plugin 8.0+
 
 ## Installation

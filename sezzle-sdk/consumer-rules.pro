@@ -11,5 +11,5 @@
 -keep class com.sezzle.sdk.promotional.SezzlePromotionalStyle { *; }
 -keep class com.sezzle.sdk.promotional.InstallmentCalculator { *; }
 
-# Keep the redirect activity (launched by system intent)
+# Keep the redirect activity (fallback for Chrome < 137, launched by system intent)
 -keep class com.sezzle.sdk.checkout.SezzleRedirectActivity { *; }
