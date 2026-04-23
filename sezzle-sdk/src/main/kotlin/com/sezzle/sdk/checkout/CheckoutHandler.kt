@@ -100,10 +100,15 @@ internal class CheckoutHandler(
         orderUUID: String,
         listener: SezzleCheckoutListener
     ) {
+        var resultDelivered = false
+
         val launcher = activity.activityResultRegistry.register(
             "sezzle_checkout_${System.nanoTime()}",
             AuthTabIntent.AuthenticateUserResultContract()
         ) { result ->
+            if (resultDelivered) return@register
+            resultDelivered = true
+
             if (result.resultCode == AuthTabIntent.RESULT_OK && result.resultUri != null) {
                 handleCallbackUri(result.resultUri!!, orderUUID, listener)
             } else {

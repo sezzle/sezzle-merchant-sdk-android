@@ -99,13 +99,17 @@ object SezzleSDK {
 
         activity.application.registerActivityLifecycleCallbacks(
             object : Application.ActivityLifecycleCallbacks {
-                override fun onActivityResumed(activity: Activity) {
-                    // Only applies to the Custom Tab fallback path
-                    if (CheckoutState.listener != null) {
-                        val listener = CheckoutState.listener
-                        CheckoutState.clear()
-                        listener?.onCheckoutError(SezzleError.BrowserDismissed)
-                    }
+                override fun onActivityResumed(resumedActivity: Activity) {
+                    // Only fire for the Custom Tab fallback path, and only for the
+                    // specific activity that started checkout — not ResultActivity,
+                    // not SezzleRedirectActivity, not any other activity.
+                    val launchingClass = CheckoutState.launchingActivityClassName ?: return
+                    if (resumedActivity.javaClass.name != launchingClass) return
+                    if (CheckoutState.listener == null) return
+
+                    val listener = CheckoutState.listener
+                    CheckoutState.clear()
+                    listener?.onCheckoutError(SezzleError.BrowserDismissed)
                 }
                 override fun onActivityCreated(a: Activity, s: Bundle?) {}
                 override fun onActivityStarted(a: Activity) {}
