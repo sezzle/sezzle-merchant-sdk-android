@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.SezzleExample" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">#8333D4</item>
+        <item name="colorPrimaryDark">#8333D4</item>
+        <item name="colorAccent">#8333D4</item>
+    </style>
+</resources>

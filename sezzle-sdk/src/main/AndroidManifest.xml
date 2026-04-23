@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application>
+        <!-- Catches sezzle-sdk:// redirects from Chrome Custom Tabs.
+             Auto-merges into the merchant's manifest — zero config needed. -->
+        <activity
+            android:name=".checkout.SezzleRedirectActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="sezzle-sdk"
+                    android:host="checkout" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>
