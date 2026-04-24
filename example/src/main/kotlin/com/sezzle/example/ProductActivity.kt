@@ -198,7 +198,7 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
             )
         )
 
-        SezzleSDK.startCheckout(checkout, this, this)
+        SezzleSDK.startCheckout(checkout, this, this, mode = com.sezzle.sdk.models.SezzleCheckoutMode.WEB_VIEW)
     }
 
     override fun onCheckoutComplete(orderUUID: String) {
