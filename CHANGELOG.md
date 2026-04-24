@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ### Added
 - `SezzleCheckoutMode` — choose between `SYSTEM_BROWSER` (default) or `WEB_VIEW` to present checkout in a WebView inside the app
 - `SezzleCheckoutWebViewActivity` — internal WebView-based checkout that intercepts `sezzle-sdk://` callbacks via `WebViewClient`
+- WebView mode: loading spinner (Sezzle purple) while checkout page loads
+- WebView mode: clean white header with "sezzle.com" title and close button
+- WebView mode: appends `isWebView=true` query param so sezzle-checkout hides its own header
 
 ### Fixed
 - Lifecycle observer now only fires `BrowserDismissed` for the activity that started checkout, not every activity resume — prevents stale error results from previous checkouts

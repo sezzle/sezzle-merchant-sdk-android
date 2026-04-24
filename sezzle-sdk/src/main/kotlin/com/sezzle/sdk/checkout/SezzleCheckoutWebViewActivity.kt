@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -31,15 +32,13 @@ class SezzleCheckoutWebViewActivity : Activity() {
     companion object {
         internal const val EXTRA_CHECKOUT_URL = "checkout_url"
         internal const val EXTRA_ORDER_UUID = "order_uuid"
-
-        // Static listener reference — set before launching, cleared after result
         internal var listener: SezzleCheckoutListener? = null
     }
 
     private var resultDelivered = false
     private var orderUUID: String = ""
     private lateinit var webView: WebView
-    private lateinit var progressBar: ProgressBar
+    private lateinit var loadingSpinner: ProgressBar
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -54,37 +53,39 @@ class SezzleCheckoutWebViewActivity : Activity() {
             return
         }
 
+        // Append isWebView=true so sezzle-checkout hides its own header
+        val urlWithParam = appendWebViewParam(checkoutUrl)
+
         val density = resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
 
-        // Root layout
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.WHITE)
         }
 
-        // Header bar
+        // Header — white background, "sezzle.com" title, close button
         val header = FrameLayout(this).apply {
-            setBackgroundColor(Color.parseColor("#8333D4"))
+            setBackgroundColor(Color.WHITE)
             setPadding(dp(16), dp(12), dp(16), dp(12))
         }
 
         val title = TextView(this).apply {
-            text = "Sezzle Checkout"
-            setTextColor(Color.WHITE)
-            textSize = 18f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            text = "sezzle.com"
+            setTextColor(Color.parseColor("#8E8E93"))
+            textSize = 16f
+            typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.NORMAL)
         }
         header.addView(title, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.CENTER_VERTICAL or Gravity.START
+            Gravity.CENTER
         ))
 
         val closeButton = TextView(this).apply {
             text = "\u2715"
-            setTextColor(Color.WHITE)
-            textSize = 20f
+            setTextColor(Color.parseColor("#333333"))
+            textSize = 18f
             setPadding(dp(8), dp(4), dp(8), dp(4))
             setOnClickListener {
                 deliverResult { it.onCheckoutError(SezzleError.BrowserDismissed) }
@@ -94,7 +95,7 @@ class SezzleCheckoutWebViewActivity : Activity() {
         header.addView(closeButton, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.CENTER_VERTICAL or Gravity.END
+            Gravity.CENTER_VERTICAL or Gravity.START
         ))
 
         root.addView(header, LinearLayout.LayoutParams(
@@ -102,15 +103,17 @@ class SezzleCheckoutWebViewActivity : Activity() {
             LinearLayout.LayoutParams.WRAP_CONTENT
         ))
 
-        // Progress bar
-        progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-            isIndeterminate = true
-            visibility = android.view.View.VISIBLE
+        // Separator line
+        val separator = View(this).apply {
+            setBackgroundColor(Color.parseColor("#E5E5EA"))
         }
-        root.addView(progressBar, LinearLayout.LayoutParams(
+        root.addView(separator, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            dp(4)
+            (0.5f * density).toInt()
         ))
+
+        // Content area with WebView + centered loading spinner
+        val content = FrameLayout(this)
 
         // WebView
         webView = WebView(this).apply {
@@ -118,7 +121,24 @@ class SezzleCheckoutWebViewActivity : Activity() {
             settings.domStorageEnabled = true
             webViewClient = SezzleWebViewClient()
         }
-        root.addView(webView, LinearLayout.LayoutParams(
+        content.addView(webView, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ))
+
+        // Loading spinner — centered, Sezzle purple
+        loadingSpinner = ProgressBar(this).apply {
+            isIndeterminate = true
+            visibility = View.VISIBLE
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#8333D4"))
+        }
+        content.addView(loadingSpinner, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER
+        ))
+
+        root.addView(content, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             0,
             1f
@@ -129,7 +149,15 @@ class SezzleCheckoutWebViewActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT
         ))
 
-        webView.loadUrl(checkoutUrl)
+        webView.loadUrl(urlWithParam)
+    }
+
+    private fun appendWebViewParam(url: String): String {
+        val uri = Uri.parse(url)
+        return uri.buildUpon()
+            .appendQueryParameter("isWebView", "true")
+            .build()
+            .toString()
     }
 
     @Deprecated("Use onBackPressedDispatcher", ReplaceWith("onBackPressedDispatcher"))
@@ -144,7 +172,6 @@ class SezzleCheckoutWebViewActivity : Activity() {
     }
 
     override fun onDestroy() {
-        // If the activity is destroyed without delivering a result, treat as dismissed
         if (!resultDelivered) {
             deliverResult { it.onCheckoutError(SezzleError.BrowserDismissed) }
         }
@@ -174,16 +201,16 @@ class SezzleCheckoutWebViewActivity : Activity() {
         }
 
         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-            progressBar.visibility = android.view.View.VISIBLE
+            loadingSpinner.visibility = View.VISIBLE
         }
 
         override fun onPageFinished(view: WebView?, url: String?) {
-            progressBar.visibility = android.view.View.GONE
+            loadingSpinner.visibility = View.GONE
         }
 
         override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
-            // Only handle main frame errors
             if (request?.isForMainFrame == true) {
+                loadingSpinner.visibility = View.GONE
                 deliverResult {
                     it.onCheckoutError(SezzleError.NetworkError(
                         RuntimeException("WebView error: ${error?.description}")
@@ -199,7 +226,6 @@ class SezzleCheckoutWebViewActivity : Activity() {
             deliverResult { it.onCheckoutError(SezzleError.InvalidResponse) }
             return
         }
-
         when (uri.path?.trimStart('/')) {
             "confirmed" -> deliverResult { it.onCheckoutComplete(orderUUID) }
             "cancelled" -> deliverResult { it.onCheckoutCancel() }

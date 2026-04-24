@@ -155,6 +155,16 @@ SezzleSDK.startCheckout(checkout, this, listener)
 
 This opens the Sezzle checkout in a secure browser tab. On Chrome 137+, it uses Auth Tab for better session persistence. On older browsers, it falls back to Chrome Custom Tabs automatically. No WebView, no manifest changes — it just works.
 
+### WebView Mode
+
+To keep the user inside your app during checkout, use `WEB_VIEW` mode:
+
+```kotlin
+SezzleSDK.startCheckout(checkout, this, listener, mode = SezzleCheckoutMode.WEB_VIEW)
+```
+
+The checkout opens in an embedded WebView with a clean header. Trade-off: no cookie sharing with Chrome (user logs in every time).
+
 ### Parameters
 
 | Parameter | Required | Description |
