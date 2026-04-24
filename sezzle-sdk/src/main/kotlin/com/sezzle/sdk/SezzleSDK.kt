@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import com.sezzle.sdk.checkout.CheckoutHandler
 import com.sezzle.sdk.checkout.CheckoutState
 import com.sezzle.sdk.models.SezzleCheckout
+import com.sezzle.sdk.models.SezzleCheckoutMode
 import com.sezzle.sdk.models.SezzleEnvironment
 import com.sezzle.sdk.models.SezzleError
 import com.sezzle.sdk.networking.HttpClient
@@ -50,17 +51,16 @@ object SezzleSDK {
     /**
      * Start a Sezzle checkout.
      *
-     * Opens the Sezzle checkout in a secure browser tab. Uses Auth Tab (Chrome 137+)
-     * when available for best session handling, or falls back to Custom Tabs on older browsers.
-     *
      * @param checkout The customer and order data for this checkout.
      * @param activity The activity to launch from. Must extend [ComponentActivity].
      * @param listener Receives checkout completion, cancellation, or error callbacks on the main thread.
+     * @param mode How the checkout is presented. Defaults to [SezzleCheckoutMode.SYSTEM_BROWSER].
      */
     fun startCheckout(
         checkout: SezzleCheckout,
         activity: Activity,
-        listener: SezzleCheckoutListener
+        listener: SezzleCheckoutListener,
+        mode: SezzleCheckoutMode = SezzleCheckoutMode.SYSTEM_BROWSER
     ) {
         val key = publicKey
         val env = environment
@@ -76,12 +76,14 @@ object SezzleSDK {
         }
 
         // Register lifecycle callbacks for Custom Tab fallback dismiss detection
-        registerLifecycleCallbacks(activity)
+        if (mode == SezzleCheckoutMode.SYSTEM_BROWSER) {
+            registerLifecycleCallbacks(activity)
+        }
 
         val httpClient = HttpClient(key, env)
         val sessionService = SessionService(httpClient)
         val handler = CheckoutHandler(sessionService)
-        handler.startCheckout(checkout, componentActivity, listener)
+        handler.startCheckout(checkout, componentActivity, listener, mode)
     }
 
     /** Whether the SDK has been configured. */

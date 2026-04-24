@@ -1,5 +1,6 @@
 package com.sezzle.sdk.checkout
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -8,6 +9,7 @@ import androidx.browser.auth.AuthTabIntent
 import androidx.browser.customtabs.CustomTabsIntent
 import com.sezzle.sdk.SezzleCheckoutListener
 import com.sezzle.sdk.models.SezzleCheckout
+import com.sezzle.sdk.models.SezzleCheckoutMode
 import com.sezzle.sdk.models.SezzleError
 import com.sezzle.sdk.networking.SessionServiceProtocol
 
@@ -48,7 +50,8 @@ internal class CheckoutHandler(
     fun startCheckout(
         checkout: SezzleCheckout,
         activity: ComponentActivity,
-        listener: SezzleCheckoutListener
+        listener: SezzleCheckoutListener,
+        mode: SezzleCheckoutMode
     ) {
         sessionService.createSession(
             checkout = checkout,
@@ -61,10 +64,17 @@ internal class CheckoutHandler(
                         return@post
                     }
 
-                    if (isAuthTabSupported(activity)) {
-                        launchAuthTab(activity, checkoutUri, orderUUID, listener)
-                    } else {
-                        launchCustomTab(activity, checkoutUri, orderUUID, listener)
+                    when (mode) {
+                        SezzleCheckoutMode.WEB_VIEW -> {
+                            launchWebView(activity, response.checkoutURL, orderUUID, listener)
+                        }
+                        SezzleCheckoutMode.SYSTEM_BROWSER -> {
+                            if (isAuthTabSupported(activity)) {
+                                launchAuthTab(activity, checkoutUri, orderUUID, listener)
+                            } else {
+                                launchCustomTab(activity, checkoutUri, orderUUID, listener)
+                            }
+                        }
                     }
                 }
             },
@@ -135,5 +145,20 @@ internal class CheckoutHandler(
             .setShowTitle(true)
             .build()
         customTabsIntent.launchUrl(activity, checkoutUri)
+    }
+
+    /** WebView mode — checkout inside the app. */
+    private fun launchWebView(
+        activity: ComponentActivity,
+        checkoutUrl: String,
+        orderUUID: String,
+        listener: SezzleCheckoutListener
+    ) {
+        SezzleCheckoutWebViewActivity.listener = listener
+        val intent = Intent(activity, SezzleCheckoutWebViewActivity::class.java).apply {
+            putExtra(SezzleCheckoutWebViewActivity.EXTRA_CHECKOUT_URL, checkoutUrl)
+            putExtra(SezzleCheckoutWebViewActivity.EXTRA_ORDER_UUID, orderUUID)
+        }
+        activity.startActivity(intent)
     }
 }
