@@ -3,9 +3,9 @@ package com.sezzle.sdk.promotional
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Typeface
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
 import android.text.SpannableString
 import android.text.SpannableStringBuilder
@@ -18,15 +18,6 @@ import com.sezzle.sdk.R
 
 /**
  * Provides raw promotional message data for custom UI implementations.
- *
- * Use this when you want to build your own promotional UI instead of using
- * [SezzlePromotionalView].
- *
- * ```kotlin
- * SezzlePromoDataHandler.getMessage(context, amountInCents = 4999) { spanned ->
- *     myTextView.text = spanned
- * }
- * ```
  */
 object SezzlePromoDataHandler {
 
@@ -37,101 +28,136 @@ object SezzlePromoDataHandler {
      * @param amountInCents The total order amount in cents.
      * @param currency ISO 4217 currency code.
      * @param style Visual style.
-     * @param callback Called on the calling thread with the styled text.
-     *   Returns empty string if the amount is not eligible.
+     * @param widgetConfig Widget configuration.
+     * @param callback Called with the styled text. Empty if not eligible.
      */
     fun getMessage(
         context: Context,
         amountInCents: Int,
         currency: String = "USD",
         style: SezzlePromotionalStyle = SezzlePromotionalStyle.LIGHT,
+        widgetConfig: SezzleWidgetConfig = SezzleWidgetConfig.DEFAULT,
         callback: (SpannableString) -> Unit
     ) {
-        if (!InstallmentCalculator.isEligible(amountInCents)) {
+        val type = InstallmentCalculator.widgetType(amountInCents, widgetConfig)
+        if (type == SezzleWidgetType.HIDDEN) {
             callback(SpannableString(""))
             return
         }
 
-        val installments = InstallmentCalculator.installments(amountInCents)
-        val formatted = InstallmentCalculator.formatCents(installments[0], currency)
-        val message = buildAttributedMessage(context, formatted, style)
+        val message = buildAttributedMessage(context, amountInCents, type, currency, style, widgetConfig)
         callback(message)
     }
 
     internal fun buildAttributedMessage(
         context: Context,
-        installmentAmount: String,
-        style: SezzlePromotionalStyle
+        amountInCents: Int,
+        widgetType: SezzleWidgetType,
+        currency: String,
+        style: SezzlePromotionalStyle,
+        widgetConfig: SezzleWidgetConfig
     ): SpannableString {
         val builder = SpannableStringBuilder()
 
-        // "or 4 interest-free payments of " with non-breaking spaces
-        val prefix = "or\u00A04\u00A0interest-free\u00A0payments\u00A0of "
-        builder.append(prefix)
-        builder.setSpan(
-            ForegroundColorSpan(style.textColor),
-            0, prefix.length,
-            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-        )
+        when (widgetType) {
+            SezzleWidgetType.PI4, SezzleWidgetType.PI5 -> {
+                val numPayments = InstallmentCalculator.numberOfPayments(widgetType)
+                val installments = InstallmentCalculator.installments(amountInCents, numPayments)
+                val formatted = InstallmentCalculator.formatCents(installments[0], currency)
 
-        // "$XX.XX" in Sezzle purple bold
-        val amountStart = builder.length
-        builder.append(installmentAmount)
-        builder.setSpan(
-            ForegroundColorSpan(SezzleBrand.PURPLE),
-            amountStart, builder.length,
-            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-        )
-        builder.setSpan(
-            StyleSpan(Typeface.BOLD),
-            amountStart, builder.length,
-            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-        )
+                // "or X payments of "
+                val prefix = "or\u00A0${numPayments}\u00A0payments\u00A0of "
+                builder.append(prefix)
+                builder.setSpan(
+                    ForegroundColorSpan(style.textColor),
+                    0, prefix.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
 
-        // " with " — non-breaking before "with"
-        val withText = "\u00A0with "
-        val withStart = builder.length
-        builder.append(withText)
-        builder.setSpan(
-            ForegroundColorSpan(style.textColor),
-            withStart, builder.length,
-            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-        )
+                // "$XX.XX" in purple bold
+                val amountStart = builder.length
+                builder.append(formatted)
+                builder.setSpan(
+                    ForegroundColorSpan(SezzleBrand.PURPLE),
+                    amountStart, builder.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                builder.setSpan(
+                    StyleSpan(Typeface.BOLD),
+                    amountStart, builder.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
 
-        // Sezzle logo inline — use ALIGN_CENTER so it vertically centers on the text line
+                // " with "
+                val withStart = builder.length
+                builder.append("\u00A0with ")
+                builder.setSpan(
+                    ForegroundColorSpan(style.textColor),
+                    withStart, builder.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+            SezzleWidgetType.LONG_TERM -> {
+                val ltConfig = widgetConfig.longTermConfig ?: return SpannableString("")
+                val lowestPayment = InstallmentCalculator.lowestMonthlyPayment(amountInCents, ltConfig)
+                val formatted = InstallmentCalculator.formatDollars(lowestPayment, currency)
+
+                // "or monthly payments as low as "
+                val prefix = "or\u00A0monthly\u00A0payments\u00A0as\u00A0low\u00A0as "
+                builder.append(prefix)
+                builder.setSpan(
+                    ForegroundColorSpan(style.textColor),
+                    0, prefix.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+
+                // "$XX.XX" in purple bold
+                val amountStart = builder.length
+                builder.append(formatted)
+                builder.setSpan(
+                    ForegroundColorSpan(SezzleBrand.PURPLE),
+                    amountStart, builder.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                builder.setSpan(
+                    StyleSpan(Typeface.BOLD),
+                    amountStart, builder.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+
+                // " with "
+                val withStart = builder.length
+                builder.append("\u00A0with ")
+                builder.setSpan(
+                    ForegroundColorSpan(style.textColor),
+                    withStart, builder.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+            SezzleWidgetType.HIDDEN -> return SpannableString("")
+        }
+
+        // Sezzle logo inline
         val logo = loadLogo(context)
         if (logo != null) {
             val logoHeight = (style.textSizeSp * context.resources.displayMetrics.scaledDensity * 1.3f).toInt()
             val logoWidth = (logoHeight * (logo.width.toFloat() / logo.height)).toInt()
             val scaledLogo = Bitmap.createScaledBitmap(logo, logoWidth, logoHeight, true)
             val imageSpan = CenteredImageSpan(context, scaledLogo)
-            val logoPlaceholder = " "
             val logoStart = builder.length
-            builder.append(logoPlaceholder)
+            builder.append(" ")
             builder.setSpan(imageSpan, logoStart, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         } else {
             val fallbackStart = builder.length
             builder.append("Sezzle")
-            builder.setSpan(
-                ForegroundColorSpan(SezzleBrand.PURPLE),
-                fallbackStart, builder.length,
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-            )
-            builder.setSpan(
-                StyleSpan(Typeface.BOLD),
-                fallbackStart, builder.length,
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-            )
+            builder.setSpan(ForegroundColorSpan(SezzleBrand.PURPLE), fallbackStart, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            builder.setSpan(StyleSpan(Typeface.BOLD), fallbackStart, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
 
-        // Info icon — non-breaking space so logo and icon stay together
+        // Info icon
         val infoStart = builder.length
         builder.append("\u00A0\u24D8")
-        builder.setSpan(
-            ForegroundColorSpan(SezzleBrand.PURPLE),
-            infoStart, builder.length,
-            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-        )
+        builder.setSpan(ForegroundColorSpan(SezzleBrand.PURPLE), infoStart, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
 
         return SpannableString(builder)
     }
@@ -152,7 +178,7 @@ object SezzlePromoDataHandler {
 
 /** An ImageSpan that vertically centers the image on the text line. */
 private class CenteredImageSpan(context: Context, bitmap: Bitmap) : ReplacementSpan() {
-    private val drawable = BitmapDrawable(context.resources, bitmap).apply {
+    private val drawable = android.graphics.drawable.BitmapDrawable(context.resources, bitmap).apply {
         setBounds(0, 0, bitmap.width, bitmap.height)
     }
 

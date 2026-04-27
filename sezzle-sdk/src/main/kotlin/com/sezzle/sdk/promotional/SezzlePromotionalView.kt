@@ -12,21 +12,18 @@ import java.lang.ref.WeakReference
 /**
  * A drop-in view that displays Sezzle installment messaging with brand styling.
  *
- * Place this on product pages, cart pages, or anywhere you want to show
- * "or 4 interest-free payments of $X.XX with Sezzle". Tapping the view
- * opens [SezzleInfoModal] automatically.
- *
- * ```kotlin
- * val promoView = SezzlePromotionalView(context, amountInCents = 4999)
- * promoView.setPresenter(activity)
- * linearLayout.addView(promoView)
- * ```
+ * Shows different messages based on the price:
+ * - Under $50: "or 4 payments of $X with Sezzle"
+ * - $50+: "or 5 payments of $X with Sezzle" (when PI5 enabled)
+ * - Long-term eligible: "or monthly payments as low as $X with Sezzle"
+ * - Below min or above max: hidden
  */
 class SezzlePromotionalView(
     context: Context,
     private var amountInCents: Int,
     private var currency: String = "USD",
-    private var style: SezzlePromotionalStyle = SezzlePromotionalStyle.LIGHT
+    private var style: SezzlePromotionalStyle = SezzlePromotionalStyle.LIGHT,
+    private var widgetConfig: SezzleWidgetConfig = SezzleWidgetConfig.DEFAULT
 ) : FrameLayout(context) {
 
     private val messageView: TextView
@@ -49,7 +46,8 @@ class SezzlePromotionalView(
 
         setOnClickListener {
             presenterRef?.get()?.let { activity ->
-                SezzleInfoModal.present(amountInCents, currency, activity)
+                val type = InstallmentCalculator.widgetType(amountInCents, widgetConfig)
+                SezzleInfoModal.present(amountInCents, currency, activity, type, widgetConfig)
             }
         }
 
@@ -61,25 +59,22 @@ class SezzlePromotionalView(
         presenterRef = WeakReference(activity)
     }
 
-    /**
-     * Update the displayed amount.
-     *
-     * Call this when the cart total or product price changes.
-     * The view auto-hides if the amount falls outside the eligible range.
-     */
+    /** Update the displayed amount. */
     fun update(amountInCents: Int) {
         this.amountInCents = amountInCents
         render()
     }
 
     private fun render() {
-        if (!InstallmentCalculator.isEligible(amountInCents)) {
+        val type = InstallmentCalculator.widgetType(amountInCents, widgetConfig)
+
+        if (type == SezzleWidgetType.HIDDEN) {
             visibility = GONE
             return
         }
 
         visibility = VISIBLE
-        SezzlePromoDataHandler.getMessage(context, amountInCents, currency, style) { spanned ->
+        SezzlePromoDataHandler.getMessage(context, amountInCents, currency, style, widgetConfig) { spanned ->
             messageView.text = spanned
         }
     }

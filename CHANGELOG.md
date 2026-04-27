@@ -7,11 +7,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
-- `SezzleCheckoutMode` — choose between `SYSTEM_BROWSER` (default) or `WEB_VIEW` to present checkout in a WebView inside the app
-- `SezzleCheckoutWebViewActivity` — internal WebView-based checkout that intercepts `sezzle-sdk://` callbacks via `WebViewClient`
-- WebView mode: loading spinner (Sezzle purple) while checkout page loads
-- WebView mode: clean white header with "sezzle.com" title and close button
-- WebView mode: appends `isWebView=true` query param so sezzle-checkout hides its own header
+- `SezzleWidgetConfig` — configurable widget with PI4/PI5/long-term support matching sezzle-js source of truth
+- PI4: "or 4 payments of $X" (default, under $50)
+- PI5: "or 5 payments of $X" (enabled, $50+)
+- Long-term: "or monthly payments as low as $X" (configurable threshold, APR amortization)
+- Removed "interest-free" from all messaging (matches sezzle-js)
+- `SezzleInfoModal` now shows PI4, PI5, or long-term modal based on price
+- `SezzleCheckoutMode` — choose between `SYSTEM_BROWSER` (default) or `WEB_VIEW`
+- WebView mode: loading spinner, white header with "sezzle.com", `isWebView=true` query param
+- Example app shows all 4 widget variants: hidden, PI4, PI5, and long-term
 
 ### Fixed
 - Lifecycle observer now only fires `BrowserDismissed` for the activity that started checkout, not every activity resume — prevents stale error results from previous checkouts

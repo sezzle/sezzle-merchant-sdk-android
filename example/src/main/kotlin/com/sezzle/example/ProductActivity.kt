@@ -21,25 +21,32 @@ import androidx.core.view.WindowInsetsCompat
 import com.sezzle.sdk.SezzleCheckoutListener
 import com.sezzle.sdk.SezzleSDK
 import com.sezzle.sdk.models.*
+import com.sezzle.sdk.promotional.SezzleLongTermConfig
 import com.sezzle.sdk.promotional.SezzlePromotionalView
+import com.sezzle.sdk.promotional.SezzleWidgetConfig
 import java.text.NumberFormat
 import java.util.Currency
 import java.util.Locale
 
 /**
- * Shows a product with a Sezzle promotional message and a "Pay with Sezzle" button.
- *
- * Demonstrates how to:
- * - Embed [SezzlePromotionalView] on a product page
- * - Build a [SezzleCheckout] from product data
- * - Start the checkout flow
+ * Shows multiple products at different price points demonstrating all widget variants.
  */
 class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
 
-    // Sample product data
-    private val productName = "Premium Wireless Headphones"
-    private val productPriceInCents = 4999 // $49.99
-    private val productCurrency = "USD"
+    // Widget config with LT enabled at $250+
+    private val widgetConfig = SezzleWidgetConfig(
+        enablePayIn5 = true,
+        longTermConfig = SezzleLongTermConfig(minPriceInCents = 25_000)
+    )
+
+    data class Product(val name: String, val emoji: String, val priceInCents: Int, val description: String)
+
+    private val products = listOf(
+        Product("Phone Case", "\uD83D\uDCF1", 1500, "Below \$35 min — widget hidden"),
+        Product("Wireless Earbuds", "\uD83C\uDFA7", 3999, "\$39.99 — 4 payments (under PI5 \$50 threshold)"),
+        Product("Premium Headphones", "\uD83C\uDFA7", 14999, "\$149.99 — 5 payments (PI5 eligible, over \$50)"),
+        Product("Smart Watch", "\u231A", 79900, "\$799 — long-term monthly payments (over \$250)"),
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -56,10 +63,10 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
             setBackgroundColor(Color.WHITE)
         }
 
-        // Toolbar that extends behind the status bar
+        // Toolbar
         val toolbar = Toolbar(this).apply {
             setBackgroundColor(Color.parseColor("#8333D4"))
-            title = "Product"
+            title = "Sezzle Widget Demo"
             setTitleTextColor(Color.WHITE)
         }
         root.addView(toolbar, LinearLayout.LayoutParams(
@@ -68,7 +75,6 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
         ))
         setSupportActionBar(toolbar)
 
-        // Apply window insets so toolbar gets top padding behind the status bar
         ViewCompat.setOnApplyWindowInsetsListener(toolbar) { v, insets ->
             val statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             v.setPadding(v.paddingLeft, statusBarHeight, v.paddingRight, v.paddingBottom)
@@ -78,105 +84,135 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
         val scrollView = ScrollView(this)
         val stack = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(20), dp(20), dp(20))
+            setPadding(dp(16), dp(16), dp(16), dp(16))
         }
         scrollView.addView(stack, ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         ))
         root.addView(scrollView, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            0,
-            1f
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
         ))
 
-        // Product image placeholder
-        val imageContainer = LinearLayout(this).apply {
-            gravity = Gravity.CENTER
+        for ((index, product) in products.withIndex()) {
+            stack.addView(
+                createProductCard(product, index),
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = dp(16) }
+            )
+        }
+
+        return root
+    }
+
+    private fun createProductCard(product: Product, index: Int): View {
+        val density = resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).toInt()
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(16), dp(16), dp(16))
             val bg = GradientDrawable().apply {
-                setColor(Color.parseColor("#F2F2F7"))
+                setColor(Color.WHITE)
+                setStroke(1, Color.parseColor("#E5E5EA"))
                 cornerRadius = dp(12).toFloat()
             }
             background = bg
-            minimumHeight = dp(200)
         }
-        imageContainer.addView(TextView(this).apply {
-            text = "\uD83C\uDFA7"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 60f)
-            gravity = Gravity.CENTER
+
+        // Emoji + name
+        val nameRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        nameRow.addView(TextView(this).apply {
+            text = product.emoji
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { rightMargin = dp(8) })
+        nameRow.addView(TextView(this).apply {
+            text = product.name
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            typeface = Typeface.DEFAULT_BOLD
         })
-        stack.addView(imageContainer, LinearLayout.LayoutParams(
+        card.addView(nameRow, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            dp(200)
-        ).apply { bottomMargin = dp(16) })
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(4) })
 
-        // Product name
-        stack.addView(TextView(this).apply {
-            text = productName
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+        // Price
+        card.addView(TextView(this).apply {
+            text = formatPrice(product.priceInCents)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
             typeface = Typeface.DEFAULT_BOLD
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(2) })
+
+        // Description
+        card.addView(TextView(this).apply {
+            text = product.description
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTextColor(Color.GRAY)
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { bottomMargin = dp(8) })
 
-        // Product price
-        stack.addView(TextView(this).apply {
-            text = formatPrice(productPriceInCents)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
-            typeface = Typeface.DEFAULT_BOLD
-        }, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { bottomMargin = dp(8) })
-
-        // Sezzle promotional view
+        // Promo view
         val promoView = SezzlePromotionalView(
             context = this,
-            amountInCents = productPriceInCents,
-            currency = productCurrency
+            amountInCents = product.priceInCents,
+            widgetConfig = widgetConfig
         )
         promoView.setPresenter(this)
-        stack.addView(promoView, LinearLayout.LayoutParams(
+        card.addView(promoView, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { bottomMargin = dp(24) })
+        ).apply { bottomMargin = dp(12) })
 
-        // Pay with Sezzle button
-        val checkoutButton = Button(this).apply {
+        // Checkout button
+        val button = Button(this).apply {
             text = "Pay with Sezzle"
             setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             typeface = Typeface.DEFAULT_BOLD
             isAllCaps = false
             val bg = GradientDrawable().apply {
                 setColor(Color.parseColor("#8333D4"))
-                cornerRadius = dp(12).toFloat()
+                cornerRadius = dp(10).toFloat()
             }
             background = bg
-            minimumHeight = dp(50)
-            setOnClickListener { startCheckout() }
+            minimumHeight = dp(44)
+            tag = index
+            setOnClickListener { startCheckout(it.tag as Int) }
         }
-        stack.addView(checkoutButton, LinearLayout.LayoutParams(
+        card.addView(button, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ))
 
-        return root
+        return card
     }
 
     private fun formatPrice(cents: Int): String {
         val dollars = cents / 100.0
         return try {
             val formatter = NumberFormat.getCurrencyInstance(Locale.US)
-            formatter.currency = Currency.getInstance(productCurrency)
+            formatter.currency = Currency.getInstance("USD")
             formatter.format(dollars)
         } catch (_: Exception) {
             "$${String.format(Locale.US, "%.2f", dollars)}"
         }
     }
 
-    private fun startCheckout() {
+    private fun startCheckout(index: Int) {
+        val product = products[index]
         val checkout = SezzleCheckout(
             customer = SezzleCustomer(
                 email = "test@example.com",
@@ -185,20 +221,20 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
             ),
             order = SezzleOrder(
                 referenceId = "example-order-${(1000..9999).random()}",
-                description = productName,
-                amount = SezzleAmount(amountInCents = productPriceInCents, currency = productCurrency),
+                description = product.name,
+                amount = SezzleAmount(amountInCents = product.priceInCents, currency = "USD"),
                 items = listOf(
                     SezzleItem(
-                        name = productName,
-                        sku = "headphones-premium-001",
+                        name = product.name,
+                        sku = "demo-$index",
                         quantity = 1,
-                        price = SezzleAmount(amountInCents = productPriceInCents, currency = productCurrency)
+                        price = SezzleAmount(amountInCents = product.priceInCents, currency = "USD")
                     )
                 )
             )
         )
 
-        SezzleSDK.startCheckout(checkout, this, this, mode = com.sezzle.sdk.models.SezzleCheckoutMode.WEB_VIEW)
+        SezzleSDK.startCheckout(checkout, this, this, mode = SezzleCheckoutMode.WEB_VIEW)
     }
 
     override fun onCheckoutComplete(orderUUID: String) {

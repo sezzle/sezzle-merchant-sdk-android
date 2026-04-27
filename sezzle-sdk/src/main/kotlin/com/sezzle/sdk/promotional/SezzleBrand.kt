@@ -24,14 +24,15 @@ object SezzleBrand {
     /** Green for first payment / "today" indicator. */
     val GREEN = Color.parseColor("#00B874")
 
-    /** Create a pie chart View for a given payment step (1-4). */
-    fun pieChartView(context: Context, step: Int, sizePx: Int): View {
-        return PieChartView(context, step, sizePx)
+    /** Create a pie chart View for a given payment step. */
+    fun pieChartView(context: Context, step: Int, totalSteps: Int = 4, sizePx: Int): View {
+        return PieChartView(context, step, totalSteps, sizePx)
     }
 
     private class PieChartView(
         context: Context,
         private val step: Int,
+        private val totalSteps: Int,
         private val sizePx: Int
     ) : View(context) {
         private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -58,7 +59,7 @@ object SezzleBrand {
 
             // Filled arc
             rect.set(cx - radius, cy - radius, cx + radius, cy + radius)
-            val sweepAngle = (step / 4f) * 360f
+            val sweepAngle = (step / totalSteps.toFloat()) * 360f
             canvas.drawArc(rect, -90f, sweepAngle, true, fillPaint)
         }
     }
