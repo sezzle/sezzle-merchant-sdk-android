@@ -15,7 +15,7 @@ Add to your module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.sezzle:sezzle-merchant-sdk:1.0.0")
+    implementation("com.sezzle:sezzle-merchant-sdk:1.0.1")
 }
 ```
 
