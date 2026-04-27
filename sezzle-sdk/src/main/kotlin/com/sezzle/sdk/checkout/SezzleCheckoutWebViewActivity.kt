@@ -200,15 +200,40 @@ class SezzleCheckoutWebViewActivity : Activity() {
             return false
         }
 
+        // Deprecated but catches JS-based redirects (window.location.href)
+        // that the newer WebResourceRequest version may miss
+        @Deprecated("Deprecated in Java")
+        override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+            if (url != null && url.startsWith("${CheckoutHandler.CALLBACK_SCHEME}://")) {
+                handleCallback(Uri.parse(url))
+                finish()
+                return true
+            }
+            @Suppress("DEPRECATION")
+            return super.shouldOverrideUrlLoading(view, url)
+        }
+
         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
             loadingSpinner.visibility = View.VISIBLE
         }
 
         override fun onPageFinished(view: WebView?, url: String?) {
             loadingSpinner.visibility = View.GONE
+            // Also check if the page ended up at our callback URL
+            if (url != null && url.startsWith("${CheckoutHandler.CALLBACK_SCHEME}://")) {
+                handleCallback(Uri.parse(url))
+                finish()
+            }
         }
 
         override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+            // Check if this is our sezzle-sdk:// redirect that the WebView couldn't load
+            val url = request?.url
+            if (url != null && url.scheme == CheckoutHandler.CALLBACK_SCHEME) {
+                handleCallback(url)
+                finish()
+                return
+            }
             if (request?.isForMainFrame == true) {
                 loadingSpinner.visibility = View.GONE
                 deliverResult {

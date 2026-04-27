@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Example app shows all 4 widget variants: hidden, PI4, PI5, and long-term
 
 ### Fixed
+- WebView checkout redirect: added deprecated `shouldOverrideUrlLoading(String)` to catch JS-based redirects, plus `onPageFinished` and `onReceivedError` URL checks as fallbacks
 - Lifecycle observer now only fires `BrowserDismissed` for the activity that started checkout, not every activity resume — prevents stale error results from previous checkouts
 - `SezzleRedirectActivity` dispatches result on the next frame after back-stack navigation, preventing the result screen from being cleared by `FLAG_ACTIVITY_CLEAR_TOP`
 - Auth Tab callback guarded with `resultDelivered` flag to prevent double delivery
