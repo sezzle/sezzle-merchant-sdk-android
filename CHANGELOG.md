@@ -4,7 +4,7 @@ All notable changes to the Sezzle Merchant SDK for Android will be documented in
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [1.0.1] - 2026-04-27
 
 ### Added
 - `SezzleWidgetConfig` — configurable widget with PI4/PI5/long-term support matching sezzle-js source of truth
@@ -18,10 +18,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Example app shows all 4 widget variants: hidden, PI4, PI5, and long-term
 
 ### Fixed
-- WebView checkout redirect: added deprecated `shouldOverrideUrlLoading(String)` to catch JS-based redirects, plus `onPageFinished` and `onReceivedError` URL checks as fallbacks
-- Lifecycle observer now only fires `BrowserDismissed` for the activity that started checkout, not every activity resume — prevents stale error results from previous checkouts
-- `SezzleRedirectActivity` dispatches result on the next frame after back-stack navigation, preventing the result screen from being cleared by `FLAG_ACTIVITY_CLEAR_TOP`
-- Auth Tab callback guarded with `resultDelivered` flag to prevent double delivery
+- WebView checkout redirect: deprecated `shouldOverrideUrlLoading(String)` + `onPageFinished` + `onReceivedError` URL checks
+- Lifecycle observer only fires `BrowserDismissed` for the checkout-launching activity
+- `SezzleRedirectActivity` dispatches result on next frame after CLEAR_TOP navigation
+- Auth Tab callback guarded with `resultDelivered` flag
 
 ## [1.0.0] - 2026-04-23
 
