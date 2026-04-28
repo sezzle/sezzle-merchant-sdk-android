@@ -39,6 +39,7 @@ class SezzleCheckoutWebViewActivity : Activity() {
     private var orderUUID: String = ""
     private lateinit var webView: WebView
     private lateinit var loadingSpinner: ProgressBar
+    private lateinit var backButton: View
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -82,19 +83,34 @@ class SezzleCheckoutWebViewActivity : Activity() {
             Gravity.CENTER
         ))
 
-        // Back button (chevron left)
-        val backButton = TextView(this).apply {
-            text = "\u2039"
-            setTextColor(Color.parseColor("#333333"))
-            textSize = 24f
-            setPadding(dp(8), dp(2), dp(8), dp(2))
+        // Back button (chevron left) — hidden until there's a page to go back to
+        val backIcon = android.widget.ImageView(this).apply {
+            val size = dp(24)
+            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bitmap)
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.parseColor("#333333")
+                style = android.graphics.Paint.Style.STROKE
+                strokeWidth = dp(2).toFloat()
+                strokeCap = android.graphics.Paint.Cap.ROUND
+                strokeJoin = android.graphics.Paint.Join.ROUND
+            }
+            val path = android.graphics.Path().apply {
+                moveTo(size * 0.6f, size * 0.2f)
+                lineTo(size * 0.3f, size * 0.5f)
+                lineTo(size * 0.6f, size * 0.8f)
+            }
+            canvas.drawPath(path, paint)
+            setImageBitmap(bitmap)
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+            visibility = View.GONE
             setOnClickListener {
                 if (webView.canGoBack()) webView.goBack()
             }
         }
-        header.addView(backButton, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT,
+        backButton = backIcon
+        header.addView(backIcon, FrameLayout.LayoutParams(
+            dp(32), dp(32),
             Gravity.CENTER_VERTICAL or Gravity.START
         ))
 
@@ -236,6 +252,7 @@ class SezzleCheckoutWebViewActivity : Activity() {
 
         override fun onPageFinished(view: WebView?, url: String?) {
             loadingSpinner.visibility = View.GONE
+            backButton.visibility = if (view?.canGoBack() == true) View.VISIBLE else View.GONE
             // Also check if the page ended up at our callback URL
             if (url != null && url.startsWith("${CheckoutHandler.CALLBACK_SCHEME}://")) {
                 handleCallback(Uri.parse(url))
