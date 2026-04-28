@@ -108,7 +108,32 @@ class SezzleCheckoutWebViewActivity : Activity() {
         webView = WebView(this).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
+            settings.setSupportMultipleWindows(true)
             webViewClient = SezzleWebViewClient()
+            webChromeClient = object : android.webkit.WebChromeClient() {
+                override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?): Boolean {
+                    // Extract the URL from the new window request and open in system browser
+                    val transport = resultMsg?.obj as? WebView.WebViewTransport
+                    if (transport != null) {
+                        val tempWebView = WebView(this@SezzleCheckoutWebViewActivity)
+                        tempWebView.webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, request.url)
+                                startActivity(intent)
+                                return true
+                            }
+                        }
+                        transport.webView = tempWebView
+                        resultMsg.sendToTarget()
+                    }
+                    return true
+                }
+            }
+            // Handle file downloads — open in system browser
+            setDownloadListener { url, _, _, _, _ ->
+                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(url))
+                startActivity(intent)
+            }
         }
         content.addView(webView, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
