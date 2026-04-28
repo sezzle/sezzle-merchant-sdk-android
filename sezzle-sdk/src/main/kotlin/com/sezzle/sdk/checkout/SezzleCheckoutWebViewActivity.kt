@@ -53,7 +53,9 @@ class SezzleCheckoutWebViewActivity : Activity() {
         }
 
         // Append isWebView=true so sezzle-checkout hides its own header
-        val urlWithParam = appendWebViewParam(checkoutUrl)
+        val urlWithParam = Uri.parse(checkoutUrl).buildUpon()
+            .appendQueryParameter("isWebView", "true")
+            .build().toString()
 
         val density = resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
@@ -63,7 +65,7 @@ class SezzleCheckoutWebViewActivity : Activity() {
             setBackgroundColor(Color.WHITE)
         }
 
-        // Header — white background, "sezzle.com" title, close button
+        // Header
         val header = FrameLayout(this).apply {
             setBackgroundColor(Color.WHITE)
             setPadding(dp(16), dp(12), dp(16), dp(12))
@@ -73,7 +75,6 @@ class SezzleCheckoutWebViewActivity : Activity() {
             text = "sezzle.com"
             setTextColor(Color.parseColor("#8E8E93"))
             textSize = 16f
-            typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.NORMAL)
         }
         header.addView(title, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -81,7 +82,7 @@ class SezzleCheckoutWebViewActivity : Activity() {
             Gravity.CENTER
         ))
 
-        // Close button (X)
+        // Close button
         val closeButton = TextView(this).apply {
             text = "\u2715"
             setTextColor(Color.parseColor("#333333"))
@@ -103,11 +104,10 @@ class SezzleCheckoutWebViewActivity : Activity() {
             LinearLayout.LayoutParams.WRAP_CONTENT
         ))
 
-        // Separator line
-        val separator = View(this).apply {
+        // Separator
+        root.addView(View(this).apply {
             setBackgroundColor(Color.parseColor("#E5E5EA"))
-        }
-        root.addView(separator, LinearLayout.LayoutParams(
+        }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             (0.5f * density).toInt()
         ))
@@ -140,8 +140,7 @@ class SezzleCheckoutWebViewActivity : Activity() {
 
         root.addView(content, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            0,
-            1f
+            0, 1f
         ))
 
         setContentView(root, ViewGroup.LayoutParams(
@@ -150,14 +149,6 @@ class SezzleCheckoutWebViewActivity : Activity() {
         ))
 
         webView.loadUrl(urlWithParam)
-    }
-
-    private fun appendWebViewParam(url: String): String {
-        val uri = Uri.parse(url)
-        return uri.buildUpon()
-            .appendQueryParameter("isWebView", "true")
-            .build()
-            .toString()
     }
 
     @Deprecated("Use onBackPressedDispatcher", ReplaceWith("onBackPressedDispatcher"))
