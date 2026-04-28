@@ -176,11 +176,16 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
             LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { bottomMargin = dp(12) })
 
-        // Checkout button
-        val button = Button(this).apply {
-            text = "Pay with Sezzle"
+        // Checkout buttons row
+        val buttonRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+
+        // System Browser button
+        val browserButton = Button(this).apply {
+            text = "System Browser"
             setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             typeface = Typeface.DEFAULT_BOLD
             isAllCaps = false
             val bg = GradientDrawable().apply {
@@ -189,10 +194,33 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
             }
             background = bg
             minimumHeight = dp(44)
-            tag = index
-            setOnClickListener { startCheckout(it.tag as Int) }
+            setOnClickListener { startCheckout(index, SezzleCheckoutMode.SYSTEM_BROWSER) }
         }
-        card.addView(button, LinearLayout.LayoutParams(
+        buttonRow.addView(browserButton, LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+        ).apply { rightMargin = dp(4) })
+
+        // WebView button
+        val webViewButton = Button(this).apply {
+            text = "WebView"
+            setTextColor(Color.parseColor("#8333D4"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            typeface = Typeface.DEFAULT_BOLD
+            isAllCaps = false
+            val bg = GradientDrawable().apply {
+                setColor(Color.WHITE)
+                setStroke(dp(2), Color.parseColor("#8333D4"))
+                cornerRadius = dp(10).toFloat()
+            }
+            background = bg
+            minimumHeight = dp(44)
+            setOnClickListener { startCheckout(index, SezzleCheckoutMode.WEB_VIEW) }
+        }
+        buttonRow.addView(webViewButton, LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+        ).apply { leftMargin = dp(4) })
+
+        card.addView(buttonRow, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ))
@@ -211,7 +239,7 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
         }
     }
 
-    private fun startCheckout(index: Int) {
+    private fun startCheckout(index: Int, mode: SezzleCheckoutMode) {
         val product = products[index]
         val checkout = SezzleCheckout(
             customer = SezzleCustomer(
@@ -234,7 +262,7 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
             )
         )
 
-        SezzleSDK.startCheckout(checkout, this, this, mode = SezzleCheckoutMode.WEB_VIEW)
+        SezzleSDK.startCheckout(checkout, this, this, mode = mode)
     }
 
     override fun onCheckoutComplete(orderUUID: String) {
