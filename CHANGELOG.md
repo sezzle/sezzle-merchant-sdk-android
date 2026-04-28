@@ -4,7 +4,7 @@ All notable changes to the Sezzle Merchant SDK for Android will be documented in
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [1.0.3] - 2026-04-28
+## [1.0.4] - 2026-04-28
 
 ### Added
 - Dark mode logo variant — white wordmark (`Sezzle_Logo_FullColor_WhiteWM`) for dark backgrounds
@@ -20,6 +20,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Inline promo logo was always dark variant (checked `Color.WHITE` but dark style uses `#F9F5FD`)
 - Footer text in short-term modal was hardcoded gray, ignoring dark mode `textSecondary`
 - Removed non-functional WebView back button (Sezzle checkout SPA doesn't support browser history navigation)
+- Removed "sezzle.com" title from WebView header — clean close-button-only design
+- Handle `window.open` / `target="_blank"` links in WebView (TILA documents) — opens in system browser
+- Handle file downloads in WebView — opens in system browser
 
 ## [1.0.1] - 2026-04-27
 
