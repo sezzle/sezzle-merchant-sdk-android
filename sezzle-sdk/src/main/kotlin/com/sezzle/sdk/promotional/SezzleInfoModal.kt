@@ -1,7 +1,6 @@
 package com.sezzle.sdk.promotional
 
 import android.app.Activity
-import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.util.TypedValue
 import android.view.Gravity
@@ -11,6 +10,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.sezzle.sdk.R
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -32,8 +32,21 @@ object SezzleInfoModal {
         widgetConfig: SezzleWidgetConfig = SezzleWidgetConfig.DEFAULT
     ) {
         val type = widgetType ?: InstallmentCalculator.widgetType(amountInCents, widgetConfig)
+        val isDark = (activity.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val modalBg = if (isDark) SezzleBrand.MODAL_BG_DARK_MODE else SezzleBrand.MODAL_BG
+
         val dialog = BottomSheetDialog(activity)
         dialog.setContentView(buildContent(activity, amountInCents, currency, type, widgetConfig))
+        // Replace default background with matching modal color to fix corner artifacts
+        dialog.setOnShowListener {
+            val bottomSheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            val density = activity.resources.displayMetrics.density
+            val r = (16 * density)
+            bottomSheet?.background = GradientDrawable().apply {
+                setColor(modalBg)
+                cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+            }
+        }
         dialog.show()
     }
 
@@ -46,13 +59,19 @@ object SezzleInfoModal {
     ): View {
         val density = activity.resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
+        val isDark = (activity.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+
+        val modalBg = if (isDark) SezzleBrand.MODAL_BG_DARK_MODE else SezzleBrand.MODAL_BG
+        val textPrimary = if (isDark) SezzleBrand.DARK_PURPLE_DARK_MODE else SezzleBrand.DARK_PURPLE
+        val textSecondary = if (isDark) SezzleBrand.GRAY_DARK_MODE else SezzleBrand.GRAY
+        val cardBg = if (isDark) SezzleBrand.LIGHT_PURPLE_BG_DARK_MODE else SezzleBrand.LIGHT_PURPLE_BG
+        val handleColor = if (isDark) SezzleBrand.HANDLE_DARK_MODE else SezzleBrand.HANDLE
 
         val container = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.WHITE)
             setPadding(dp(24), dp(16), dp(24), dp(24))
             val bg = GradientDrawable().apply {
-                setColor(Color.WHITE)
+                setColor(modalBg)
                 cornerRadii = floatArrayOf(
                     dp(16).toFloat(), dp(16).toFloat(),
                     dp(16).toFloat(), dp(16).toFloat(),
@@ -65,7 +84,7 @@ object SezzleInfoModal {
         // Grab handle
         val handle = View(activity).apply {
             val handleBg = GradientDrawable().apply {
-                setColor(Color.parseColor("#DDDDDD"))
+                setColor(handleColor)
                 cornerRadius = dp(2).toFloat()
             }
             background = handleBg
@@ -82,22 +101,27 @@ object SezzleInfoModal {
         }
 
         // Sezzle logo
-        content.addView(TextView(activity).apply {
-            text = "\u2726 sezzle"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
-            setTextColor(SezzleBrand.DARK_PURPLE)
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { bottomMargin = dp(16) })
+        val logoResId = if (isDark) R.drawable.sezzle_logo_dark else R.drawable.sezzle_logo
+        val logoBitmap = android.graphics.BitmapFactory.decodeResource(activity.resources, logoResId)
+        if (logoBitmap != null) {
+            val logoView = android.widget.ImageView(activity).apply {
+                setImageBitmap(logoBitmap)
+                scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                adjustViewBounds = true
+            }
+            val logoHeight = dp(28)
+            val logoWidth = (logoHeight * (logoBitmap.width.toFloat() / logoBitmap.height)).toInt()
+            content.addView(logoView, LinearLayout.LayoutParams(logoWidth, logoHeight).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(16)
+            })
+        }
 
         when (widgetType) {
             SezzleWidgetType.PI4, SezzleWidgetType.PI5 ->
-                buildShortTermContent(activity, content, amountInCents, currency, widgetType, ::dp)
+                buildShortTermContent(activity, content, amountInCents, currency, widgetType, ::dp, textPrimary, textSecondary, cardBg)
             SezzleWidgetType.LONG_TERM ->
-                buildLongTermContent(activity, content, amountInCents, currency, widgetConfig, ::dp)
+                buildLongTermContent(activity, content, amountInCents, currency, widgetConfig, ::dp, textPrimary, textSecondary, cardBg)
             SezzleWidgetType.HIDDEN -> {}
         }
 
@@ -112,7 +136,10 @@ object SezzleInfoModal {
         amountInCents: Int,
         currency: String,
         widgetType: SezzleWidgetType,
-        dp: (Int) -> Int
+        dp: (Int) -> Int,
+        textPrimary: Int,
+        textSecondary: Int,
+        cardBg: Int
     ) {
         val numPayments = InstallmentCalculator.numberOfPayments(widgetType)
         val density = activity.resources.displayMetrics.density
@@ -121,7 +148,7 @@ object SezzleInfoModal {
         content.addView(TextView(activity).apply {
             text = "$numPayments easy payments"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
-            setTextColor(SezzleBrand.DARK_PURPLE)
+            setTextColor(textPrimary)
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(
@@ -133,7 +160,7 @@ object SezzleInfoModal {
         content.addView(TextView(activity).apply {
             text = "Split your purchase into $numPayments payments,\nevery 2 weeks. No hidden fees."
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            setTextColor(SezzleBrand.GRAY)
+            setTextColor(textSecondary)
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
@@ -142,7 +169,7 @@ object SezzleInfoModal {
 
         // Payment schedule card
         content.addView(
-            buildScheduleCard(activity, amountInCents, currency, numPayments),
+            buildScheduleCard(activity, amountInCents, currency, numPayments, cardBg, textSecondary),
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -153,7 +180,7 @@ object SezzleInfoModal {
         content.addView(TextView(activity).apply {
             text = "No hidden fees \u00B7 No impact to your credit score"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTextColor(SezzleBrand.GRAY)
+            setTextColor(textSecondary)
             gravity = Gravity.CENTER
         })
     }
@@ -162,7 +189,9 @@ object SezzleInfoModal {
         activity: Activity,
         amountInCents: Int,
         currency: String,
-        numberOfPayments: Int
+        numberOfPayments: Int,
+        cardBgColor: Int = SezzleBrand.LIGHT_PURPLE_BG,
+        dateColor: Int = SezzleBrand.GRAY
     ): View {
         val density = activity.resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
@@ -176,7 +205,7 @@ object SezzleInfoModal {
             gravity = Gravity.CENTER
             setPadding(dp(8), dp(16), dp(8), dp(16))
             val bg = GradientDrawable().apply {
-                setColor(SezzleBrand.LIGHT_PURPLE_BG)
+                setColor(cardBgColor)
                 cornerRadius = dp(12).toFloat()
             }
             background = bg
@@ -212,7 +241,7 @@ object SezzleInfoModal {
             column.addView(TextView(activity).apply {
                 text = dateString
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
-                setTextColor(if (index == 0) SezzleBrand.GREEN else SezzleBrand.GRAY)
+                setTextColor(if (index == 0) SezzleBrand.GREEN else dateColor)
                 gravity = Gravity.CENTER
             })
 
@@ -228,7 +257,10 @@ object SezzleInfoModal {
         amountInCents: Int,
         currency: String,
         widgetConfig: SezzleWidgetConfig,
-        dp: (Int) -> Int
+        dp: (Int) -> Int,
+        textPrimary: Int,
+        textSecondary: Int,
+        cardBg: Int
     ) {
         val ltConfig = widgetConfig.longTermConfig ?: return
         val density = activity.resources.displayMetrics.density
@@ -237,7 +269,7 @@ object SezzleInfoModal {
         content.addView(TextView(activity).apply {
             text = "Flexible monthly payments"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
-            setTextColor(SezzleBrand.DARK_PURPLE)
+            setTextColor(textPrimary)
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(
@@ -249,7 +281,7 @@ object SezzleInfoModal {
         content.addView(TextView(activity).apply {
             text = "Choose a payment plan that works for you."
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            setTextColor(SezzleBrand.GRAY)
+            setTextColor(textSecondary)
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
@@ -260,7 +292,7 @@ object SezzleInfoModal {
         content.addView(TextView(activity).apply {
             text = "Sample payments for ${InstallmentCalculator.formatCents(amountInCents, currency)}"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            setTextColor(SezzleBrand.DARK_PURPLE)
+            setTextColor(textPrimary)
             typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(
@@ -272,7 +304,7 @@ object SezzleInfoModal {
         val options = InstallmentCalculator.longTermOptions(amountInCents, ltConfig)
         for (option in options) {
             content.addView(
-                buildLongTermOptionCard(activity, option, currency),
+                buildLongTermOptionCard(activity, option, currency, textPrimary, textSecondary, cardBg),
                 LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
@@ -284,13 +316,13 @@ object SezzleInfoModal {
         content.addView(TextView(activity).apply {
             text = "Rates from ${ltConfig.minAPR}% \u2013 ${ltConfig.maxAPR}% APR. Subject to credit approval."
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-            setTextColor(SezzleBrand.GRAY)
+            setTextColor(textSecondary)
             gravity = Gravity.CENTER
             setPadding(0, dp(12), 0, 0)
         })
     }
 
-    private fun buildLongTermOptionCard(activity: Activity, option: LongTermOption, currency: String): View {
+    private fun buildLongTermOptionCard(activity: Activity, option: LongTermOption, currency: String, textPrimary: Int = SezzleBrand.DARK_PURPLE, textSecondary: Int = SezzleBrand.GRAY, cardBgColor: Int = SezzleBrand.LIGHT_PURPLE_BG): View {
         val density = activity.resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
 
@@ -299,7 +331,7 @@ object SezzleInfoModal {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(16), dp(14), dp(16), dp(14))
             val bg = GradientDrawable().apply {
-                setColor(SezzleBrand.LIGHT_PURPLE_BG)
+                setColor(cardBgColor)
                 cornerRadius = dp(10).toFloat()
             }
             background = bg
@@ -310,13 +342,13 @@ object SezzleInfoModal {
         termLayout.addView(TextView(activity).apply {
             text = "${option.months} months"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-            setTextColor(SezzleBrand.DARK_PURPLE)
+            setTextColor(textPrimary)
             typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
         })
         termLayout.addView(TextView(activity).apply {
             text = if (option.apr > 0) "${String.format("%.2f", option.apr)}% APR" else "0% APR"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTextColor(SezzleBrand.GRAY)
+            setTextColor(textSecondary)
         })
         card.addView(termLayout, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
@@ -335,7 +367,7 @@ object SezzleInfoModal {
         paymentLayout.addView(TextView(activity).apply {
             text = "per month"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTextColor(SezzleBrand.GRAY)
+            setTextColor(textSecondary)
             gravity = Gravity.END
         })
         card.addView(paymentLayout)

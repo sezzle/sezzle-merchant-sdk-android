@@ -54,13 +54,18 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
         setContentView(buildUI())
     }
 
+    private val isDarkMode: Boolean
+        get() = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+
     private fun buildUI(): View {
         val density = resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
 
+        val bgColor = if (isDarkMode) Color.parseColor("#120A23") else Color.WHITE
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.WHITE)
+            setBackgroundColor(bgColor)
         }
 
         // Toolbar
@@ -111,12 +116,17 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
         val density = resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
 
+        val cardBg = if (isDarkMode) Color.parseColor("#1C1230") else Color.WHITE
+        val cardBorder = if (isDarkMode) Color.parseColor("#2A1F40") else Color.parseColor("#E5E5EA")
+        val textPrimary = if (isDarkMode) Color.WHITE else Color.BLACK
+        val textSecondary = if (isDarkMode) Color.parseColor("#AAAAAA") else Color.GRAY
+
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(16), dp(16), dp(16))
             val bg = GradientDrawable().apply {
-                setColor(Color.WHITE)
-                setStroke(1, Color.parseColor("#E5E5EA"))
+                setColor(cardBg)
+                setStroke(1, cardBorder)
                 cornerRadius = dp(12).toFloat()
             }
             background = bg
@@ -138,6 +148,7 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
             text = product.name
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
             typeface = Typeface.DEFAULT_BOLD
+            setTextColor(textPrimary)
         })
         card.addView(nameRow, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
@@ -149,6 +160,7 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
             text = formatPrice(product.priceInCents)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
             typeface = Typeface.DEFAULT_BOLD
+            setTextColor(textPrimary)
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
@@ -158,7 +170,7 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
         card.addView(TextView(this).apply {
             text = product.description
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTextColor(Color.GRAY)
+            setTextColor(textSecondary)
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT

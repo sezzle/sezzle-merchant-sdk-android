@@ -4,6 +4,22 @@ All notable changes to the Sezzle Merchant SDK for Android will be documented in
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.0.2] - 2026-04-28
+
+### Added
+- Dark mode logo variant — white wordmark (`Sezzle_Logo_FullColor_WhiteWM`) for dark backgrounds
+- `SezzleLogoVariant` enum for explicit light/dark logo control in `SezzlePromotionalStyle`
+- Centralized modal colors: `MODAL_BG`, `MODAL_BG_DARK_MODE`, `HANDLE`, `HANDLE_DARK_MODE` in `SezzleBrand`
+
+### Changed
+- Info modal header now shows the official Sezzle logo image instead of "✦ sezzle" text
+- High-quality logo PNGs (2394×599 @ 3x) converted from official CDN SVGs via cairosvg
+- BottomSheetDialog background matches modal color to eliminate white corner artifacts
+
+### Fixed
+- Inline promo logo was always dark variant (checked `Color.WHITE` but dark style uses `#F9F5FD`)
+- Footer text in short-term modal was hardcoded gray, ignoring dark mode `textSecondary`
+
 ## [1.0.1] - 2026-04-27
 
 ### Added

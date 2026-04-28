@@ -118,7 +118,10 @@ val promoView = SezzlePromotionalView(
 
 ### Styling
 
+`SezzlePromotionalView` automatically detects dark mode and selects the correct logo variant. You can also override the style manually:
+
 ```kotlin
+// Explicit dark theme (light text + white logo for dark backgrounds)
 val promoView = SezzlePromotionalView(
     context = this,
     amountInCents = 4999,

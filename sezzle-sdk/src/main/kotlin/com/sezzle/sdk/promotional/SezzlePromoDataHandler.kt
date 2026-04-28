@@ -138,7 +138,7 @@ object SezzlePromoDataHandler {
         }
 
         // Sezzle logo inline
-        val logo = loadLogo(context)
+        val logo = loadLogo(context, style)
         if (logo != null) {
             val logoHeight = (style.textSizeSp * context.resources.displayMetrics.scaledDensity * 1.3f).toInt()
             val logoWidth = (logoHeight * (logo.width.toFloat() / logo.height)).toInt()
@@ -176,16 +176,26 @@ object SezzlePromoDataHandler {
         return SpannableString(builder)
     }
 
-    private var cachedLogo: Bitmap? = null
+    private var cachedLogoLight: Bitmap? = null
+    private var cachedLogoDark: Bitmap? = null
 
-    private fun loadLogo(context: Context): Bitmap? {
-        cachedLogo?.let { return it }
-        return try {
-            val bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.sezzle_logo)
-            cachedLogo = bitmap
-            bitmap
-        } catch (_: Exception) {
-            null
+    private fun loadLogo(context: Context, style: SezzlePromotionalStyle): Bitmap? {
+        val useLightLogo = style.logoVariant == SezzleLogoVariant.LIGHT
+        if (useLightLogo) {
+            cachedLogoDark?.let { return it }
+            return try {
+                val bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.sezzle_logo_dark)
+                    ?: BitmapFactory.decodeResource(context.resources, R.drawable.sezzle_logo)
+                cachedLogoDark = bitmap
+                bitmap
+            } catch (_: Exception) { null }
+        } else {
+            cachedLogoLight?.let { return it }
+            return try {
+                val bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.sezzle_logo)
+                cachedLogoLight = bitmap
+                bitmap
+            } catch (_: Exception) { null }
         }
     }
 }

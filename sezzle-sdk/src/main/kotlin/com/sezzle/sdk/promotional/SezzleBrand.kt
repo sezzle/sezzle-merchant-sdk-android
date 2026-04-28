@@ -9,20 +9,31 @@ import android.view.View
 
 /** Sezzle brand constants matching the web installment widget. */
 object SezzleBrand {
-    /** Primary purple -- installment amounts, active elements. */
+    /** Primary purple — installment amounts, active elements. */
     val PURPLE = Color.parseColor("#8333D4")
 
-    /** Dark purple -- headings, body text. */
-    val DARK_PURPLE = Color.parseColor("#392558")
+    /** Dark purple — headings, body text. Light: #382757, Dark: #F9F5FD */
+    val DARK_PURPLE = Color.parseColor("#382757")
+    val DARK_PURPLE_DARK_MODE = Color.parseColor("#F9F5FD")
 
-    /** Gray -- due dates, secondary text. */
-    val GRAY = Color.parseColor("#5E5E5E")
+    /** Gray — due dates, secondary text. Light: #767676, Dark: #AEAEAE */
+    val GRAY = Color.parseColor("#767676")
+    val GRAY_DARK_MODE = Color.parseColor("#AEAEAE")
 
     /** Light purple background for cards. */
     val LIGHT_PURPLE_BG = Color.argb((255 * 0.05).toInt(), 0x83, 0x33, 0xD4)
+    val LIGHT_PURPLE_BG_DARK_MODE = Color.argb((255 * 0.20).toInt(), 0x83, 0x33, 0xD4)
 
     /** Green for first payment / "today" indicator. */
     val GREEN = Color.parseColor("#00B874")
+
+    /** Modal background. */
+    val MODAL_BG = Color.WHITE
+    val MODAL_BG_DARK_MODE = Color.parseColor("#1C1230")
+
+    /** Modal grab handle. */
+    val HANDLE = Color.parseColor("#DDDDDD")
+    val HANDLE_DARK_MODE = Color.parseColor("#444444")
 
     /** Create a pie chart View for a given payment step. */
     fun pieChartView(context: Context, step: Int, totalSteps: Int = 4, sizePx: Int): View {
