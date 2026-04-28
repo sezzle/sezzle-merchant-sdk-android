@@ -71,17 +71,6 @@ class SezzleCheckoutWebViewActivity : Activity() {
             setPadding(dp(16), dp(12), dp(16), dp(12))
         }
 
-        val title = TextView(this).apply {
-            text = "sezzle.com"
-            setTextColor(Color.parseColor("#8E8E93"))
-            textSize = 16f
-        }
-        header.addView(title, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.CENTER
-        ))
-
         // Close button
         val closeButton = TextView(this).apply {
             text = "\u2715"
