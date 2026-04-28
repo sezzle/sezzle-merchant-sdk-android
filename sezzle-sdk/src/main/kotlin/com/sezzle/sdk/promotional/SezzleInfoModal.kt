@@ -1,18 +1,16 @@
 package com.sezzle.sdk.promotional
 
 import android.app.Activity
-import android.app.Dialog
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
-import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.view.Window
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -34,15 +32,8 @@ object SezzleInfoModal {
         widgetConfig: SezzleWidgetConfig = SezzleWidgetConfig.DEFAULT
     ) {
         val type = widgetType ?: InstallmentCalculator.widgetType(amountInCents, widgetConfig)
-        val dialog = Dialog(activity)
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        val dialog = BottomSheetDialog(activity)
         dialog.setContentView(buildContent(activity, amountInCents, currency, type, widgetConfig))
-        dialog.window?.setLayout(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-        dialog.window?.setGravity(Gravity.BOTTOM)
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
         dialog.show()
     }
 

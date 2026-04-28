@@ -2,6 +2,8 @@ package com.sezzle.sdk.promotional
 
 import android.app.Activity
 import android.content.Context
+import android.content.res.Configuration
+import android.graphics.Color
 import android.text.SpannableString
 import android.util.TypedValue
 import android.view.Gravity
@@ -18,11 +20,14 @@ import java.lang.ref.WeakReference
  * - Long-term eligible: "or monthly payments as low as $X with Sezzle"
  * - Below min or above max: hidden
  */
-class SezzlePromotionalView(
+class SezzlePromotionalView @JvmOverloads constructor(
     context: Context,
     private var amountInCents: Int,
     private var currency: String = "USD",
-    private var style: SezzlePromotionalStyle = SezzlePromotionalStyle.LIGHT,
+    private var style: SezzlePromotionalStyle = run {
+        val isDarkMode = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        if (isDarkMode) SezzlePromotionalStyle.DARK else SezzlePromotionalStyle.LIGHT
+    },
     private var widgetConfig: SezzleWidgetConfig = SezzleWidgetConfig.DEFAULT
 ) : FrameLayout(context) {
 

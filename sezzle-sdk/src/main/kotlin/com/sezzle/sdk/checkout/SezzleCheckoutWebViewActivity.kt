@@ -82,6 +82,23 @@ class SezzleCheckoutWebViewActivity : Activity() {
             Gravity.CENTER
         ))
 
+        // Back button (chevron left)
+        val backButton = TextView(this).apply {
+            text = "\u2039"
+            setTextColor(Color.parseColor("#333333"))
+            textSize = 24f
+            setPadding(dp(8), dp(2), dp(8), dp(2))
+            setOnClickListener {
+                if (webView.canGoBack()) webView.goBack()
+            }
+        }
+        header.addView(backButton, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER_VERTICAL or Gravity.START
+        ))
+
+        // Close button (X)
         val closeButton = TextView(this).apply {
             text = "\u2715"
             setTextColor(Color.parseColor("#333333"))
@@ -95,7 +112,7 @@ class SezzleCheckoutWebViewActivity : Activity() {
         header.addView(closeButton, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.CENTER_VERTICAL or Gravity.START
+            Gravity.CENTER_VERTICAL or Gravity.END
         ))
 
         root.addView(header, LinearLayout.LayoutParams(

@@ -154,10 +154,24 @@ object SezzlePromoDataHandler {
             builder.setSpan(StyleSpan(Typeface.BOLD), fallbackStart, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
 
-        // Info icon
+        // Info icon — shift up slightly to align with the logo
         val infoStart = builder.length
         builder.append("\u00A0\u24D8")
         builder.setSpan(ForegroundColorSpan(SezzleBrand.PURPLE), infoStart, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        // Shift the ⓘ up to match the logo's vertical center
+        val shiftPx = (style.textSizeSp * context.resources.displayMetrics.scaledDensity * 0.1f).toInt()
+        builder.setSpan(
+            object : android.text.style.MetricAffectingSpan() {
+                override fun updateMeasureState(textPaint: android.text.TextPaint) {
+                    textPaint.baselineShift += shiftPx
+                }
+                override fun updateDrawState(textPaint: android.text.TextPaint) {
+                    textPaint.baselineShift += shiftPx
+                }
+            },
+            infoStart + 1, builder.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
 
         return SpannableString(builder)
     }
