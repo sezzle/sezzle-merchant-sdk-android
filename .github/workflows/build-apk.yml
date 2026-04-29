@@ -1,0 +1,31 @@
+name: Build Example APK
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Inject sandbox key
+        run: echo "sezzle.publicKey=${{ secrets.SEZZLE_SANDBOX_PUBLIC_KEY }}" >> local.properties
+
+      - name: Build debug APK
+        run: ./gradlew :example:assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: sezzle-example-debug
+          path: example/build/outputs/apk/debug/example-debug.apk
