@@ -21,6 +21,19 @@ dependencies {
 }
 ```
 
+### Manual AAR
+
+1. Download `sezzle-merchant-sdk-{version}.aar` from the [Releases](https://github.com/sezzle/sezzle-merchant-sdk-android/releases) page
+2. Copy it to your app's `libs/` directory
+3. Add to your `build.gradle.kts`:
+
+```kotlin
+dependencies {
+    implementation(files("libs/sezzle-merchant-sdk-1.1.0.aar"))
+    implementation("androidx.browser:browser:1.8.0")
+}
+```
+
 ## Get Your API Keys
 
 1. Log into the [Sezzle Merchant Dashboard](https://dashboard.sezzle.com)
