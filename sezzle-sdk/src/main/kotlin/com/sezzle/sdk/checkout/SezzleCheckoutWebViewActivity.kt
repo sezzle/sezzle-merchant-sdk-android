@@ -52,10 +52,8 @@ class SezzleCheckoutWebViewActivity : Activity() {
             return
         }
 
-        // Append isWebView=true so sezzle-checkout hides its own header
-        val urlWithParam = Uri.parse(checkoutUrl).buildUpon()
-            .appendQueryParameter("isWebView", "true")
-            .build().toString()
+        // isWebView=true is already appended by CheckoutHandler
+        val urlWithParam = checkoutUrl
 
         val density = resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()

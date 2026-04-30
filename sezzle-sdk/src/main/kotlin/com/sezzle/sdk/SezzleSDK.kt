@@ -12,6 +12,7 @@ import com.sezzle.sdk.models.SezzleEnvironment
 import com.sezzle.sdk.models.SezzleError
 import com.sezzle.sdk.networking.HttpClient
 import com.sezzle.sdk.networking.SessionService
+import com.sezzle.sdk.networking.SezzleEventLogger
 
 /**
  * The main entry point for the Sezzle Merchant SDK.
@@ -82,7 +83,8 @@ object SezzleSDK {
 
         val httpClient = HttpClient(key, env)
         val sessionService = SessionService(httpClient)
-        val handler = CheckoutHandler(sessionService)
+        val eventLogger = SezzleEventLogger(key, env)
+        val handler = CheckoutHandler(sessionService, eventLogger)
         handler.startCheckout(checkout, componentActivity, listener, mode)
     }
 
