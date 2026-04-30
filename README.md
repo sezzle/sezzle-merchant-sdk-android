@@ -196,12 +196,21 @@ The checkout opens in an embedded WebView with a clean header. Trade-off: no coo
 | `customer.firstName` | No | Customer's first name |
 | `customer.lastName` | No | Customer's last name |
 | `customer.phone` | No | Customer's phone number |
+| `customer.dob` | No | Date of birth (YYYY-MM-DD) |
+| `customer.billingAddress` | No | Billing address (`SezzleAddress`) |
+| `customer.shippingAddress` | No | Shipping address (`SezzleAddress`) |
+| `customer.tokenize` | No | Enable customer tokenization for future orders |
 | `order.referenceId` | Yes | Your internal order ID |
 | `order.description` | No | Order description (defaults to "Mobile SDK Order") |
 | `order.amount.amountInCents` | Yes | Total amount in cents (e.g., 4999 = $49.99) |
 | `order.amount.currency` | Yes | ISO 4217 currency code ("USD", "CAD") |
 | `order.intent` | No | `AUTH` (default) or `CAPTURE` |
 | `order.items` | No | Line items in the order |
+| `order.discounts` | No | Discount line items (`List<SezzleDiscount>`) |
+| `order.taxAmount` | No | Tax amount breakdown |
+| `order.shippingAmount` | No | Shipping amount breakdown |
+| `order.metadata` | No | Custom key-value pairs (SDK metadata auto-included) |
+| `order.locale` | No | Checkout locale (`EN_US`, `EN_CA`, `FR_CA`) |
 
 ## Step 4: Handle the Result
 

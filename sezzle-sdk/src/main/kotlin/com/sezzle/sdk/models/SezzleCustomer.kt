@@ -1,16 +1,15 @@
 package com.sezzle.sdk.models
 
-/**
- * Customer information for a Sezzle checkout.
- *
- * @property email Customer's email address (required).
- * @property firstName Customer's first name.
- * @property lastName Customer's last name.
- * @property phone Customer's phone number.
- */
+/** Customer information sent with the checkout session. */
 data class SezzleCustomer(
     val email: String,
     val firstName: String? = null,
     val lastName: String? = null,
-    val phone: String? = null
+    val phone: String? = null,
+    val dob: String? = null,
+    val billingAddress: SezzleAddress? = null,
+    val shippingAddress: SezzleAddress? = null,
+    val tokenize: Boolean? = null,
+    val recurring: Boolean? = null,
+    val recurringMetadata: Map<String, String>? = null
 )

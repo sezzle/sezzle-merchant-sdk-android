@@ -4,6 +4,27 @@ All notable changes to the Sezzle Merchant SDK for Android will be documented in
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.1.0] - 2026-04-30
+
+### Added
+- Full POST /v2/session API support — all fields from the Sezzle API are now available:
+  - `SezzleAddress` — billing and shipping addresses on `SezzleCustomer`
+  - `SezzleDiscount` — order discount line items
+  - `SezzleLocale` — checkout locale (`EN_US`, `EN_CA`, `FR_CA`)
+  - `SezzleFinancingOption` — restrict to specific financing plans
+  - `SezzleItem` gains `brand`, `imageUrl`, `productUrl`, `globalTradeItemNumber`, `manufacturerPartNumber`, `categoryPath`
+  - `SezzleCustomer` gains `dob`, `billingAddress`, `shippingAddress`, `tokenize`, `recurring`, `recurringMetadata`
+  - `SezzleOrder` gains `discounts`, `taxAmount`, `shippingAmount`, `metadata`, `requiresShippingInfo`, `locale`, `checkoutFinancingOptions`
+- SDK event logging — fire-and-forget telemetry to Sezzle's event pipeline (`/sdk-event-logging`)
+  - Events: `popup_created`, `loaded`, `success`, `cancel`, `failure`
+  - Includes SDK version, platform, device model, OS version in user agent
+  - Enables checkout funnel analytics and SDK attribution
+- SDK metadata in order — `_sdk_platform`, `_sdk_version`, `_device_model`, `_os_version` automatically included in `order.metadata` for attribution tracking
+
+### Changed
+- `isWebView=true` now appended to checkout URL for both system browser and WebView modes (moved from WebView activity to CheckoutHandler)
+- SDK version bumped to 1.1.0
+
 ## [1.0.4] - 2026-04-28
 
 ### Added

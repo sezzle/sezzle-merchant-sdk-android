@@ -12,23 +12,20 @@ import com.sezzle.sdk.models.SezzleCheckout
 import com.sezzle.sdk.models.SezzleCheckoutMode
 import com.sezzle.sdk.models.SezzleError
 import com.sezzle.sdk.networking.SessionServiceProtocol
+import com.sezzle.sdk.networking.SezzleEventLogger
 
-/**
- * Orchestrates the checkout flow: create session -> open browser -> handle callback.
- *
- * Uses [AuthTabIntent] when supported (Chrome 137+) for secure browser-based checkout
- * with built-in callback handling. Falls back to [CustomTabsIntent] with
- * [SezzleRedirectActivity] on older browsers.
- */
 internal class CheckoutHandler(
-    private val sessionService: SessionServiceProtocol
+    private val sessionService: SessionServiceProtocol,
+    private val eventLogger: SezzleEventLogger? = null
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var sessionUUID: String = ""
+    private var checkoutUUID: String = ""
+    private var checkoutMode: String = ""
 
     companion object {
         const val CALLBACK_SCHEME = "sezzle-sdk"
 
-        /** Parse a callback URI and dispatch to the listener. */
         internal fun handleCallbackUri(
             uri: Uri,
             orderUUID: String,
@@ -38,7 +35,6 @@ internal class CheckoutHandler(
                 listener.onCheckoutError(SezzleError.InvalidResponse)
                 return
             }
-
             when (uri.path?.trimStart('/')) {
                 "confirmed" -> listener.onCheckoutComplete(orderUUID)
                 "cancelled" -> listener.onCheckoutCancel()
@@ -53,26 +49,55 @@ internal class CheckoutHandler(
         listener: SezzleCheckoutListener,
         mode: SezzleCheckoutMode
     ) {
+        checkoutMode = if (mode == SezzleCheckoutMode.WEB_VIEW) "webview" else "system_browser"
+        eventLogger?.log(event = SezzleEventLogger.Event.POPUP_CREATED, mode = checkoutMode, message = "checkout initiated")
+
+        // Wrap listener to add event logging
+        val loggingListener = object : SezzleCheckoutListener {
+            override fun onCheckoutComplete(orderUUID: String) {
+                eventLogger?.log(event = SezzleEventLogger.Event.SUCCESS, sessionUUID = sessionUUID, orderUUID = orderUUID, checkoutUUID = checkoutUUID, mode = checkoutMode)
+                listener.onCheckoutComplete(orderUUID)
+            }
+            override fun onCheckoutCancel() {
+                eventLogger?.log(event = SezzleEventLogger.Event.CANCEL, sessionUUID = sessionUUID, checkoutUUID = checkoutUUID, mode = checkoutMode)
+                listener.onCheckoutCancel()
+            }
+            override fun onCheckoutError(error: SezzleError) {
+                eventLogger?.log(event = SezzleEventLogger.Event.FAILURE, sessionUUID = sessionUUID, checkoutUUID = checkoutUUID, mode = checkoutMode, message = error.message)
+                listener.onCheckoutError(error)
+            }
+        }
+
         sessionService.createSession(
             checkout = checkout,
             onSuccess = { response ->
+                sessionUUID = response.uuid
+                checkoutUUID = Uri.parse(response.checkoutURL).getQueryParameter("id") ?: ""
+
+                eventLogger?.log(
+                    event = SezzleEventLogger.Event.LOADED,
+                    sessionUUID = response.uuid,
+                    orderUUID = response.orderUUID,
+                    checkoutUUID = checkoutUUID,
+                    mode = checkoutMode
+                )
+
                 mainHandler.post {
                     val orderUUID = response.orderUUID
-                    val checkoutUri = Uri.parse(response.checkoutURL)
-                    if (checkoutUri == null) {
-                        listener.onCheckoutError(SezzleError.InvalidResponse)
-                        return@post
-                    }
+                    // Append isWebView=true for all modes
+                    val checkoutUri = Uri.parse(response.checkoutURL).buildUpon()
+                        .appendQueryParameter("isWebView", "true")
+                        .build()
 
                     when (mode) {
                         SezzleCheckoutMode.WEB_VIEW -> {
-                            launchWebView(activity, response.checkoutURL, orderUUID, listener)
+                            launchWebView(activity, checkoutUri.toString(), orderUUID, loggingListener)
                         }
                         SezzleCheckoutMode.SYSTEM_BROWSER -> {
                             if (isAuthTabSupported(activity)) {
-                                launchAuthTab(activity, checkoutUri, orderUUID, listener)
+                                launchAuthTab(activity, checkoutUri, orderUUID, loggingListener)
                             } else {
-                                launchCustomTab(activity, checkoutUri, orderUUID, listener)
+                                launchCustomTab(activity, checkoutUri, orderUUID, loggingListener)
                             }
                         }
                     }
@@ -80,21 +105,18 @@ internal class CheckoutHandler(
             },
             onError = { error ->
                 mainHandler.post {
-                    listener.onCheckoutError(error)
+                    loggingListener.onCheckoutError(error)
                 }
             }
         )
     }
 
-    /** Auth Tab requires Chrome 137+. Check the installed Chrome version. */
     private fun isAuthTabSupported(activity: ComponentActivity): Boolean {
         return try {
             val pm = activity.packageManager
-            // Resolve which browser handles https:// — this gives us the active (updated) version
             val browserIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse("https://"))
             val resolveInfo = pm.resolveActivity(browserIntent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
             val browserPackage = resolveInfo?.activityInfo?.packageName ?: return false
-
             val packageInfo = pm.getPackageInfo(browserPackage, 0)
             val majorVersion = packageInfo.versionName?.split(".")?.firstOrNull()?.toIntOrNull() ?: 0
             majorVersion >= 137
@@ -103,7 +125,6 @@ internal class CheckoutHandler(
         }
     }
 
-    /** Auth Tab path — Chrome 137+. Result comes via ActivityResultLauncher. */
     private fun launchAuthTab(
         activity: ComponentActivity,
         checkoutUri: Uri,
@@ -111,26 +132,22 @@ internal class CheckoutHandler(
         listener: SezzleCheckoutListener
     ) {
         var resultDelivered = false
-
         val launcher = activity.activityResultRegistry.register(
             "sezzle_checkout_${System.nanoTime()}",
             AuthTabIntent.AuthenticateUserResultContract()
         ) { result ->
             if (resultDelivered) return@register
             resultDelivered = true
-
             if (result.resultCode == AuthTabIntent.RESULT_OK && result.resultUri != null) {
                 handleCallbackUri(result.resultUri!!, orderUUID, listener)
             } else {
                 listener.onCheckoutError(SezzleError.BrowserDismissed)
             }
         }
-
         val authTab = AuthTabIntent.Builder().build()
         authTab.launch(launcher, checkoutUri, CALLBACK_SCHEME)
     }
 
-    /** Custom Tab fallback — Chrome < 137. Result comes via SezzleRedirectActivity. */
     private fun launchCustomTab(
         activity: ComponentActivity,
         checkoutUri: Uri,
@@ -140,14 +157,10 @@ internal class CheckoutHandler(
         CheckoutState.listener = listener
         CheckoutState.orderUUID = orderUUID
         CheckoutState.launchingActivityClassName = activity.javaClass.name
-
-        val customTabsIntent = CustomTabsIntent.Builder()
-            .setShowTitle(true)
-            .build()
+        val customTabsIntent = CustomTabsIntent.Builder().setShowTitle(true).build()
         customTabsIntent.launchUrl(activity, checkoutUri)
     }
 
-    /** WebView mode — checkout inside the app. */
     private fun launchWebView(
         activity: ComponentActivity,
         checkoutUrl: String,
