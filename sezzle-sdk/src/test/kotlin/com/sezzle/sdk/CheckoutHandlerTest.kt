@@ -86,33 +86,37 @@ class CheckoutHandlerTest {
 
     @Test
     fun `handleCallbackUri dispatches confirmed correctly`() {
-        var completedUUID: String? = null
+        var completedResult: SezzleCheckoutResult? = null
         val listener = object : SezzleCheckoutListener {
-            override fun onCheckoutComplete(orderUUID: String) { completedUUID = orderUUID }
+            override fun onCheckoutComplete(result: SezzleCheckoutResult) { completedResult = result }
             override fun onCheckoutCancel() { fail("Should not cancel") }
             override fun onCheckoutError(error: SezzleError) { fail("Should not error") }
         }
 
         CheckoutHandler.handleCallbackUri(
             Uri.parse("sezzle-sdk://checkout/confirmed"),
+            CheckoutHandler.DEFAULT_COMPLETE_URL,
+            CheckoutHandler.DEFAULT_CANCEL_URL,
             "order-789",
             listener
         )
 
-        assertEquals("order-789", completedUUID)
+        assertEquals("order-789", completedResult?.orderUUID)
     }
 
     @Test
     fun `handleCallbackUri dispatches cancelled correctly`() {
         var cancelled = false
         val listener = object : SezzleCheckoutListener {
-            override fun onCheckoutComplete(orderUUID: String) { fail("Should not complete") }
+            override fun onCheckoutComplete(result: SezzleCheckoutResult) { fail("Should not complete") }
             override fun onCheckoutCancel() { cancelled = true }
             override fun onCheckoutError(error: SezzleError) { fail("Should not error") }
         }
 
         CheckoutHandler.handleCallbackUri(
             Uri.parse("sezzle-sdk://checkout/cancelled"),
+            CheckoutHandler.DEFAULT_COMPLETE_URL,
+            CheckoutHandler.DEFAULT_CANCEL_URL,
             "order-789",
             listener
         )

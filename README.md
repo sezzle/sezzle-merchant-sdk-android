@@ -17,7 +17,7 @@ Add to your module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.sezzle:sezzle-merchant-sdk:1.1.0")
+    implementation("com.sezzle:sezzle-merchant-sdk:1.2.0")
 }
 ```
 
@@ -29,7 +29,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation(files("libs/sezzle-merchant-sdk-1.1.0.aar"))
+    implementation(files("libs/sezzle-merchant-sdk-1.2.0.aar"))
     implementation("androidx.browser:browser:1.8.0")
 }
 ```
@@ -218,10 +218,16 @@ Implement `SezzleCheckoutListener` to receive callbacks:
 
 ```kotlin
 class MyActivity : AppCompatActivity(), SezzleCheckoutListener {
-    override fun onCheckoutComplete(orderUUID: String) {
+    override fun onCheckoutComplete(result: SezzleCheckoutResult) {
         // Checkout succeeded!
-        // Send orderUUID to your backend to capture the payment.
-        Log.d("Sezzle", "Order UUID: $orderUUID")
+        result.orderUUID?.let {
+            // SDK-creates-session flow — send to your backend for capture
+            Log.d("Sezzle", "Order UUID: $it")
+        }
+        result.callbackURL?.let {
+            // Server-driven flow — read query params you encoded
+            Log.d("Sezzle", "Callback URL: $it")
+        }
     }
 
     override fun onCheckoutCancel() {
@@ -257,6 +263,73 @@ Content-Type: application/json
 > Capture, refund, release, and order status are always server-to-server calls using your private key. The SDK never handles these operations.
 
 See the [Sezzle API documentation](https://docs.sezzle.com) for full details on server-side operations.
+
+## Server-Driven Integration (BYO Session)
+
+For larger merchants who prefer a fully server-driven integration — no public key on-device, the backend owns session creation, capture, and refunds — use the pass-URL `startCheckout` overload. The SDK opens the URL, intercepts your chosen callback URLs, and reports back via `SezzleCheckoutListener`.
+
+### Step 1 — Backend creates the session
+
+Your backend creates a Sezzle session — see the [`POST /v2/session` reference](https://docs.sezzle.com/docs/api/core/sessions/postv2session) for the full request contract. Two SDK-specific notes:
+
+- **Choose your own `complete_url` / `cancel_url`.** Any URL works — pick a custom scheme like `yourapp-sezzle://...` or HTTPS deep links to a domain you control. You can encode state in the query string (e.g. `yourapp-sezzle://done?orderRef=12345`) and recover it in the SDK callback.
+- **Persist `order.uuid` server-side** before responding to the app — the app only needs `order.checkout_url` plus the two callback URLs.
+
+### Step 2 — App presents checkout
+
+```kotlin
+SezzleSDK.startCheckout(
+    checkoutUrl = checkoutUrl,                                      // from order.checkout_url
+    completeUrl = Uri.parse("yourapp-sezzle://checkout/done"),       // same as your server's complete_url.href
+    cancelUrl = Uri.parse("yourapp-sezzle://checkout/cancelled"),    // same as your server's cancel_url.href
+    activity = this,
+    listener = this,
+    mode = SezzleCheckoutMode.WEB_VIEW   // or SYSTEM_BROWSER
+)
+```
+
+`SezzleSDK.configure(...)` is **not** required for this flow — there's nothing for the SDK to authenticate.
+
+### Step 3 — Read the result
+
+```kotlin
+override fun onCheckoutComplete(result: SezzleCheckoutResult) {
+    val callbackURL = result.callbackURL ?: return
+    val orderRef = callbackURL.getQueryParameter("orderRef")
+    // Look up `orderRef` in your backend, then call /v2/order/{order.uuid}/capture
+}
+```
+
+### Manifest note for `SYSTEM_BROWSER` mode (Custom Tabs fallback)
+
+The SDK ships an intent-filter for `sezzle-sdk://checkout` only. If you use `SYSTEM_BROWSER` mode with a custom callback scheme **and** a user lands on Chrome <137 (where AuthTab isn't available and the SDK falls back to Chrome Custom Tabs), you must register an intent-filter for your scheme in your own `AndroidManifest.xml`, pointing at `SezzleRedirectActivity`:
+
+```xml
+<activity
+    android:name="com.sezzle.sdk.checkout.SezzleRedirectActivity"
+    android:exported="true"
+    android:launchMode="singleTask"
+    android:theme="@android:style/Theme.Translucent.NoTitleBar"
+    tools:replace="android:exported">
+    <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="yourapp-sezzle" android:host="checkout" />
+    </intent-filter>
+</activity>
+```
+
+`WEB_VIEW` mode and AuthTab (Chrome ≥137) need no manifest work.
+
+### Notes
+
+- **Match your URLs.** Whatever your backend passed as `complete_url.href` / `cancel_url.href`, pass the same `Uri` to `startCheckout`. The SDK matches on scheme + host + path; query params on the inbound URL are read by you.
+- **`order.uuid` lives on your server.** It's not in the `checkout_url` and isn't echoed back — your backend already has it from the session-creation response.
+
+### Working example
+
+The bundled example app (`example/`) has a **Server-driven flow** card at the top of the product list with two buttons — **System Browser** (uses `sezzle-example://`, with the matching intent-filter in `example/src/main/AndroidManifest.xml`) and **WebView** (uses HTTPS callbacks) — that exercise both modes end-to-end against the sandbox API. Use it as a copy-pastable reference: see `example/src/main/kotlin/com/sezzle/example/ProductActivity.kt` for the request shape, callback URL choices, and `result.callbackURL` parsing.
 
 ## Error Handling
 

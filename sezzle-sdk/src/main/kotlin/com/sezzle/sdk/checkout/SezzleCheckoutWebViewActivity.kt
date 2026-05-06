@@ -18,33 +18,46 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import com.sezzle.sdk.SezzleCheckoutListener
+import com.sezzle.sdk.SezzleCheckoutResult
 import com.sezzle.sdk.models.SezzleError
 
 /**
  * Presents the Sezzle checkout in a WebView inside the app.
  *
  * Used when [SezzleCheckoutMode.WEB_VIEW][com.sezzle.sdk.models.SezzleCheckoutMode.WEB_VIEW]
- * is specified. Intercepts the `sezzle-sdk://` callback URL via [WebViewClient] to detect
- * checkout completion, cancellation, or errors.
+ * is specified. Intercepts navigation to the configured `completeUrl` / `cancelUrl`
+ * via [WebViewClient] (any scheme — typically `sezzle-sdk://` for the SDK-creates-session
+ * flow, or merchant-supplied for the server-driven flow).
  */
 class SezzleCheckoutWebViewActivity : Activity() {
 
     companion object {
         internal const val EXTRA_CHECKOUT_URL = "checkout_url"
         internal const val EXTRA_ORDER_UUID = "order_uuid"
+        internal const val EXTRA_COMPLETE_URL = "complete_url"
+        internal const val EXTRA_CANCEL_URL = "cancel_url"
         internal var listener: SezzleCheckoutListener? = null
     }
 
     private var resultDelivered = false
-    private var orderUUID: String = ""
+    private var orderUUID: String? = null
+    private lateinit var completeUrl: Uri
+    private lateinit var cancelUrl: Uri
     private lateinit var webView: WebView
     private lateinit var loadingSpinner: ProgressBar
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val checkoutUrl = intent.getStringExtra(EXTRA_CHECKOUT_URL)
-        orderUUID = intent.getStringExtra(EXTRA_ORDER_UUID) ?: ""
+        orderUUID = intent.getStringExtra(EXTRA_ORDER_UUID)
+        completeUrl = intent.getStringExtra(EXTRA_COMPLETE_URL)
+            ?.let { Uri.parse(it) }
+            ?: CheckoutHandler.DEFAULT_COMPLETE_URL
+        cancelUrl = intent.getStringExtra(EXTRA_CANCEL_URL)
+            ?.let { Uri.parse(it) }
+            ?: CheckoutHandler.DEFAULT_CANCEL_URL
 
         if (checkoutUrl == null) {
             deliverResult { it.onCheckoutError(SezzleError.InvalidResponse) }
@@ -71,7 +84,7 @@ class SezzleCheckoutWebViewActivity : Activity() {
 
         // Close button
         val closeButton = TextView(this).apply {
-            text = "\u2715"
+            text = "✕"
             setTextColor(Color.parseColor("#333333"))
             textSize = 18f
             setPadding(dp(8), dp(4), dp(8), dp(4))
@@ -110,7 +123,6 @@ class SezzleCheckoutWebViewActivity : Activity() {
             webViewClient = SezzleWebViewClient()
             webChromeClient = object : android.webkit.WebChromeClient() {
                 override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?): Boolean {
-                    // Extract the URL from the new window request and open in system browser
                     val transport = resultMsg?.obj as? WebView.WebViewTransport
                     if (transport != null) {
                         val tempWebView = WebView(this@SezzleCheckoutWebViewActivity)
@@ -127,7 +139,6 @@ class SezzleCheckoutWebViewActivity : Activity() {
                     return true
                 }
             }
-            // Handle file downloads — open in system browser
             setDownloadListener { url, _, _, _, _ ->
                 val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(url))
                 startActivity(intent)
@@ -192,10 +203,14 @@ class SezzleCheckoutWebViewActivity : Activity() {
         }
     }
 
+    private fun isCallback(uri: Uri): Boolean {
+        return CheckoutHandler.matches(uri, completeUrl) || CheckoutHandler.matches(uri, cancelUrl)
+    }
+
     private inner class SezzleWebViewClient : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val url = request.url
-            if (url.scheme == CheckoutHandler.CALLBACK_SCHEME) {
+            if (isCallback(url)) {
                 handleCallback(url)
                 finish()
                 return true
@@ -207,10 +222,13 @@ class SezzleCheckoutWebViewActivity : Activity() {
         // that the newer WebResourceRequest version may miss
         @Deprecated("Deprecated in Java")
         override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-            if (url != null && url.startsWith("${CheckoutHandler.CALLBACK_SCHEME}://")) {
-                handleCallback(Uri.parse(url))
-                finish()
-                return true
+            if (url != null) {
+                val parsed = Uri.parse(url)
+                if (isCallback(parsed)) {
+                    handleCallback(parsed)
+                    finish()
+                    return true
+                }
             }
             @Suppress("DEPRECATION")
             return super.shouldOverrideUrlLoading(view, url)
@@ -222,17 +240,20 @@ class SezzleCheckoutWebViewActivity : Activity() {
 
         override fun onPageFinished(view: WebView?, url: String?) {
             loadingSpinner.visibility = View.GONE
-            // Also check if the page ended up at our callback URL
-            if (url != null && url.startsWith("${CheckoutHandler.CALLBACK_SCHEME}://")) {
-                handleCallback(Uri.parse(url))
-                finish()
+            if (url != null) {
+                val parsed = Uri.parse(url)
+                if (isCallback(parsed)) {
+                    handleCallback(parsed)
+                    finish()
+                }
             }
         }
 
         override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
-            // Check if this is our sezzle-sdk:// redirect that the WebView couldn't load
+            // The WebView fails to load custom-scheme redirects (sezzle-sdk://, poshmark://...);
+            // treat those errors as the callback firing.
             val url = request?.url
-            if (url != null && url.scheme == CheckoutHandler.CALLBACK_SCHEME) {
+            if (url != null && isCallback(url)) {
                 handleCallback(url)
                 finish()
                 return
@@ -250,14 +271,20 @@ class SezzleCheckoutWebViewActivity : Activity() {
     }
 
     private fun handleCallback(uri: Uri) {
-        if (uri.host != "checkout") {
-            deliverResult { it.onCheckoutError(SezzleError.InvalidResponse) }
-            return
-        }
-        when (uri.path?.trimStart('/')) {
-            "confirmed" -> deliverResult { it.onCheckoutComplete(orderUUID) }
-            "cancelled" -> deliverResult { it.onCheckoutCancel() }
-            else -> deliverResult { it.onCheckoutError(SezzleError.InvalidResponse) }
+        when {
+            CheckoutHandler.matches(uri, completeUrl) -> {
+                val result = SezzleCheckoutResult(
+                    orderUUID = orderUUID,
+                    callbackURL = if (orderUUID == null) uri else null
+                )
+                deliverResult { it.onCheckoutComplete(result) }
+            }
+            CheckoutHandler.matches(uri, cancelUrl) -> {
+                deliverResult { it.onCheckoutCancel() }
+            }
+            else -> {
+                deliverResult { it.onCheckoutError(SezzleError.InvalidResponse) }
+            }
         }
     }
 }

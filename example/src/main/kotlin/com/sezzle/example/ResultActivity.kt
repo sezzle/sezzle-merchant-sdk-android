@@ -24,8 +24,10 @@ class ResultActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_TYPE = "result_type"
         const val EXTRA_ORDER_UUID = "order_uuid"
+        const val EXTRA_CALLBACK_URL = "callback_url"
         const val EXTRA_ERROR_MESSAGE = "error_message"
         const val TYPE_SUCCESS = "success"
+        const val TYPE_SUCCESS_CALLBACK = "success_callback"
         const val TYPE_CANCELLED = "cancelled"
         const val TYPE_ERROR = "error"
     }
@@ -48,7 +50,7 @@ class ResultActivity : AppCompatActivity() {
 
         // Toolbar
         val toolbarTitle = when (type) {
-            TYPE_SUCCESS -> "Checkout Complete"
+            TYPE_SUCCESS, TYPE_SUCCESS_CALLBACK -> "Checkout Complete"
             TYPE_CANCELLED -> "Checkout Cancelled"
             else -> "Checkout Error"
         }
@@ -89,6 +91,7 @@ class ResultActivity : AppCompatActivity() {
 
         when (type) {
             TYPE_SUCCESS -> buildSuccess(stack)
+            TYPE_SUCCESS_CALLBACK -> buildSuccessCallback(stack)
             TYPE_CANCELLED -> buildCancelled(stack)
             TYPE_ERROR -> buildError(stack)
         }
@@ -167,6 +170,95 @@ class ResultActivity : AppCompatActivity() {
 
         stack.addView(TextView(this).apply {
             text = "Send this UUID to your backend to capture the payment via POST /v2/order/{uuid}/capture"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setTextColor(Color.GRAY)
+            gravity = Gravity.CENTER
+        })
+    }
+
+    private fun buildSuccessCallback(stack: LinearLayout) {
+        val density = resources.displayMetrics.density
+        val callbackUrl = intent.getStringExtra(EXTRA_CALLBACK_URL) ?: "N/A"
+        val parsed = android.net.Uri.parse(callbackUrl)
+        val params = parsed.queryParameterNames.joinToString("\n") { name ->
+            "$name = ${parsed.getQueryParameter(name)}"
+        }.ifEmpty { "(none)" }
+
+        stack.addView(TextView(this).apply {
+            text = "✅"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 60f)
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = (16 * density).toInt() })
+
+        stack.addView(TextView(this).apply {
+            text = "Server-Driven Checkout Complete!"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#00B874"))
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = (24 * density).toInt() })
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(
+                (16 * density).toInt(), (16 * density).toInt(),
+                (16 * density).toInt(), (16 * density).toInt()
+            )
+            val bg = GradientDrawable().apply {
+                setColor(Color.parseColor("#F2F2F7"))
+                cornerRadius = 12 * density
+            }
+            background = bg
+        }
+
+        card.addView(TextView(this).apply {
+            text = "Callback URL"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTextColor(Color.GRAY)
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = (4 * density).toInt() })
+
+        card.addView(TextView(this).apply {
+            text = callbackUrl
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            typeface = Typeface.MONOSPACE
+            setTextIsSelectable(true)
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = (12 * density).toInt() })
+
+        card.addView(TextView(this).apply {
+            text = "Query Parameters"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTextColor(Color.GRAY)
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = (4 * density).toInt() })
+
+        card.addView(TextView(this).apply {
+            text = params
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            typeface = Typeface.MONOSPACE
+            setTextIsSelectable(true)
+        })
+
+        stack.addView(card, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = (16 * density).toInt() })
+
+        stack.addView(TextView(this).apply {
+            text = "Look up the order in your backend (you encoded its ID in your complete_url) and call POST /v2/order/{uuid}/capture."
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             setTextColor(Color.GRAY)
             gravity = Gravity.CENTER

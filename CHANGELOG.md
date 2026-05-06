@@ -4,6 +4,22 @@ All notable changes to the Sezzle Merchant SDK for Android will be documented in
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.0] - 2026-05-06
+
+### Added
+- Server-driven checkout entrypoint — `SezzleSDK.startCheckout(checkoutUrl, completeUrl, cancelUrl, activity, listener, mode)` for merchants whose backend creates the session via `POST /v2/session` directly. No public key on-device, no `SezzleSDK.configure()` required. Merchants supply their own callback URLs (any scheme) and the SDK intercepts navigation to them.
+- `SezzleCheckoutResult` — unified result class exposing `orderUUID` (SDK-creates-session flow) or `callbackURL` (server-driven flow). The full callback URL is delivered so merchants can encode their own state in query params (e.g. `yourapp-sezzle://done?orderRef=12345`) and recover it on completion.
+
+### Changed
+- `SezzleCheckoutListener.onCheckoutComplete` now receives a `SezzleCheckoutResult` instead of a bare `orderUUID` string, unifying both flows behind a single listener method.
+- `CheckoutHandler` URL match logic is now dynamic — compares scheme + host + path against the merchant's callback URLs (case-insensitive on scheme/host). Existing flow continues to use the hardcoded `sezzle-sdk://checkout/(confirmed|cancelled)` URLs.
+- `WebViewActivity` URL interception (`shouldOverrideUrlLoading` modern + deprecated, `onPageFinished`, `onReceivedError`) now matches against the merchant-supplied complete/cancel URLs.
+- `SezzleRedirectActivity` reads complete/cancel URLs from `CheckoutState` for the Custom Tabs fallback path.
+- `SezzleEventLogger` no-ops gracefully on the server-driven flow (no public key = no events).
+
+### Notes
+- The SDK's bundled `AndroidManifest.xml` intent-filter still covers only `sezzle-sdk://checkout`. Merchants using a custom callback scheme with `SYSTEM_BROWSER` mode (and Chrome <137) must register an intent-filter for their scheme in their own manifest. See README → Server-Driven Integration for details.
+
 ## [1.1.0] - 2026-04-30
 
 ### Added
