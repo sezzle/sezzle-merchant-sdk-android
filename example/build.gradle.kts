@@ -14,12 +14,16 @@ val sezzlePublicKey = localProps.getProperty("sezzle.publicKey", "YOUR_SANDBOX_P
 
 android {
     namespace = "com.sezzle.example"
-    compileSdk = 36
+    // Pinned to 35 (intentionally one below the latest) as a regression check that the
+    // published SDK stays consumable from compileSdk-35 merchant apps. If you bump this,
+    // also verify the SDK's own compileSdk in `sezzle-sdk/build.gradle.kts` doesn't drift
+    // higher than what merchants on 35 can support.
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.sezzle.example"
         minSdk = 23
-        targetSdk = 36
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
 

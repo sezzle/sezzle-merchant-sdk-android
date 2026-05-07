@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 - Pinned `androidx.browser:browser` to `1.8.0` (was `1.10.0`) so consumer apps on `compileSdk 35` are no longer forced onto `compileSdk 36`. Removed the `AuthTabIntent` path (which required 1.10.0) — `SYSTEM_BROWSER` mode now always uses Chrome Custom Tabs, which is fully supported in 1.8.0 and works across all browser versions.
+- Lowered the SDK module's own `compileSdk` from `36` to `35`. Combined with the `androidx.browser` pin above, consumer apps on `compileSdk 35+` can now consume this SDK without AAR-metadata errors. The example app is also pinned to `compileSdk 35` as a regression check.
 
 ## [1.1.0] - 2026-04-30
 
