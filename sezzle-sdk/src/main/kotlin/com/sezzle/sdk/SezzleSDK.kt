@@ -169,9 +169,9 @@ object SezzleSDK {
     }
 
     /**
-     * Lifecycle callbacks for Custom Tab fallback dismiss detection.
-     * When Auth Tab is used, this is not needed (Auth Tab has its own result callback).
-     * But when falling back to Custom Tabs, we detect browser dismiss via onResume.
+     * Lifecycle callbacks for Custom Tabs dismiss detection: if the launching activity
+     * is resumed while a checkout is still in flight (no redirect arrived yet), the user
+     * dismissed the Custom Tab — fire BrowserDismissed.
      */
     private fun registerLifecycleCallbacks(activity: Activity) {
         if (lifecycleCallbacksRegistered) return

@@ -176,7 +176,7 @@ val checkout = SezzleCheckout(
 SezzleSDK.startCheckout(checkout, this, listener)
 ```
 
-This opens the Sezzle checkout in a secure browser tab. On Chrome 137+, it uses Auth Tab for better session persistence. On older browsers, it falls back to Chrome Custom Tabs automatically. No WebView, no manifest changes — it just works.
+This opens the Sezzle checkout in Chrome Custom Tabs — a secure browser tab that runs in its own process and shares cookies with Chrome (faster login for returning users). No WebView, no manifest changes — it just works.
 
 ### WebView Mode
 
