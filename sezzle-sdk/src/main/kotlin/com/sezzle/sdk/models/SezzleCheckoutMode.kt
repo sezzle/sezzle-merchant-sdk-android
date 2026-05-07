@@ -5,7 +5,7 @@ package com.sezzle.sdk.models
  */
 enum class SezzleCheckoutMode {
     /**
-     * Opens checkout in the system browser (Auth Tab on Chrome 137+, Custom Tab on older).
+     * Opens checkout in the system browser via Chrome Custom Tabs.
      *
      * This is the **recommended** mode:
      * - Secure: runs in a separate browser process

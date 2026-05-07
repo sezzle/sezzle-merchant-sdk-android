@@ -3,17 +3,10 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Required to query browser version for Auth Tab support check -->
-    <queries>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="https" />
-        </intent>
-    </queries>
-
     <application>
-        <!-- Fallback redirect handler for browsers that don't support Auth Tab (Chrome < 137).
-             When Auth Tab IS supported, this activity is never triggered. -->
+        <!-- Redirect handler for the SYSTEM_BROWSER (Chrome Custom Tabs) checkout path.
+             Catches the SDK's default `sezzle-sdk://checkout/` redirects and forwards them
+             back to the launching activity via CheckoutHandler.handleCallbackUri. -->
         <activity
             android:name=".checkout.SezzleRedirectActivity"
             android:exported="true"

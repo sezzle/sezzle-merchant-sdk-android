@@ -18,9 +18,18 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import android.net.Uri
+import com.sezzle.example.BuildConfig
 import com.sezzle.sdk.SezzleCheckoutListener
+import com.sezzle.sdk.SezzleCheckoutResult
 import com.sezzle.sdk.SezzleSDK
 import com.sezzle.sdk.models.*
+import org.json.JSONObject
+import java.io.OutputStreamWriter
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlin.concurrent.thread
+import android.util.Base64
 import com.sezzle.sdk.promotional.SezzleLongTermConfig
 import com.sezzle.sdk.promotional.SezzlePromotionalView
 import com.sezzle.sdk.promotional.SezzleWidgetConfig
@@ -99,6 +108,15 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
         ))
 
+        // Server-driven flow demo at the top
+        stack.addView(
+            createServerDrivenCard(),
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = dp(16) }
+        )
+
         for ((index, product) in products.withIndex()) {
             stack.addView(
                 createProductCard(product, index),
@@ -110,6 +128,202 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
         }
 
         return root
+    }
+
+    private fun createServerDrivenCard(): View {
+        val density = resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).toInt()
+
+        val cardBg = if (isDarkMode) Color.parseColor("#1C1230") else Color.WHITE
+        val cardBorder = if (isDarkMode) Color.parseColor("#2A1F40") else Color.parseColor("#E5E5EA")
+        val textPrimary = if (isDarkMode) Color.WHITE else Color.BLACK
+        val textSecondary = if (isDarkMode) Color.parseColor("#AAAAAA") else Color.GRAY
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            background = GradientDrawable().apply {
+                setColor(cardBg)
+                setStroke(1, cardBorder)
+                cornerRadius = dp(12).toFloat()
+            }
+        }
+
+        card.addView(TextView(this).apply {
+            text = "Server-driven flow"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(textPrimary)
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(4) })
+
+        card.addView(TextView(this).apply {
+            text = "Your backend creates the session via POST /v2/session and supplies its own callback URLs. The SDK opens the URL and reports back via callbackURL. No public key needed on-device."
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTextColor(textSecondary)
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(12) })
+
+        val buttonRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+
+        // System Browser (Chrome Custom Tabs)
+        val browserButton = Button(this).apply {
+            text = "System Browser"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            typeface = Typeface.DEFAULT_BOLD
+            isAllCaps = false
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#8333D4"))
+                cornerRadius = dp(10).toFloat()
+            }
+            minimumHeight = dp(44)
+            setOnClickListener { startServerDrivenSystemBrowserDemo() }
+        }
+        buttonRow.addView(browserButton, LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+        ).apply { rightMargin = dp(4) })
+
+        // WebView (in-app)
+        val webViewButton = Button(this).apply {
+            text = "WebView"
+            setTextColor(Color.parseColor("#8333D4"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            typeface = Typeface.DEFAULT_BOLD
+            isAllCaps = false
+            background = GradientDrawable().apply {
+                setColor(Color.WHITE)
+                setStroke(dp(2), Color.parseColor("#8333D4"))
+                cornerRadius = dp(10).toFloat()
+            }
+            minimumHeight = dp(44)
+            setOnClickListener { startServerDrivenWebViewDemo() }
+        }
+        buttonRow.addView(webViewButton, LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+        ).apply { leftMargin = dp(4) })
+
+        card.addView(buttonRow, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+
+        return card
+    }
+
+    /**
+     * WebView mode demo: HTTPS callback URLs (App-Links style). Any URL scheme works
+     * in WebView mode — the SDK's WebView intercepts before the URL loads.
+     */
+    private fun startServerDrivenWebViewDemo() {
+        val orderRef = "poshmark-demo-${(1000..9999).random()}"
+        val completeUrl = Uri.parse("https://example.com/sezzle-checkout/done?orderRef=$orderRef")
+        val cancelUrl = Uri.parse("https://example.com/sezzle-checkout/cancelled")
+        runServerDrivenDemo(orderRef, completeUrl, cancelUrl, SezzleCheckoutMode.WEB_VIEW)
+    }
+
+    /**
+     * System Browser mode demo: custom-scheme callback URLs.
+     * The example app's AndroidManifest.xml registers an intent-filter for
+     * `sezzle-example://checkout` pointing at SezzleRedirectActivity — without it,
+     * Chrome Custom Tabs wouldn't route the redirect back into the app.
+     */
+    private fun startServerDrivenSystemBrowserDemo() {
+        val orderRef = "poshmark-demo-${(1000..9999).random()}"
+        val completeUrl = Uri.parse("sezzle-example://checkout/done?orderRef=$orderRef")
+        val cancelUrl = Uri.parse("sezzle-example://checkout/cancelled")
+        runServerDrivenDemo(orderRef, completeUrl, cancelUrl, SezzleCheckoutMode.SYSTEM_BROWSER)
+    }
+
+    /**
+     * Simulates a server-driven integration: pretends to be a backend by POSTing
+     * to /v2/session directly, then hands the URL to the new pass-URL entrypoint.
+     * In production, the network call lives on the merchant's server, not in the app.
+     */
+    private fun runServerDrivenDemo(
+        orderRef: String,
+        completeUrl: Uri,
+        cancelUrl: Uri,
+        mode: SezzleCheckoutMode
+    ) {
+        thread {
+            try {
+                val checkoutUrl = createSandboxSession(completeUrl, cancelUrl, orderRef)
+                runOnUiThread {
+                    SezzleSDK.startCheckout(
+                        checkoutUrl = checkoutUrl,
+                        completeUrl = completeUrl,
+                        cancelUrl = cancelUrl,
+                        activity = this,
+                        listener = this,
+                        mode = mode
+                    )
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    startActivity(Intent(this, ResultActivity::class.java).apply {
+                        putExtra(ResultActivity.EXTRA_TYPE, ResultActivity.TYPE_ERROR)
+                        putExtra(ResultActivity.EXTRA_ERROR_MESSAGE, "Failed to create session: ${e.message}")
+                    })
+                }
+            }
+        }
+    }
+
+    private fun createSandboxSession(completeUrl: Uri, cancelUrl: Uri, referenceId: String): String {
+        val url = URL("https://sandbox.gateway.sezzle.com/v2/session")
+        val conn = url.openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.setRequestProperty("Content-Type", "application/json")
+        val auth = Base64.encodeToString(
+            BuildConfig.SEZZLE_PUBLIC_KEY.toByteArray(Charsets.UTF_8),
+            Base64.NO_WRAP
+        )
+        conn.setRequestProperty("Authorization", "Basic $auth")
+        conn.doOutput = true
+
+        val body = JSONObject().apply {
+            put("complete_url", JSONObject().apply {
+                put("href", completeUrl.toString())
+                put("method", "GET")
+            })
+            put("cancel_url", JSONObject().apply {
+                put("href", cancelUrl.toString())
+                put("method", "GET")
+            })
+            put("customer", JSONObject().apply {
+                put("email", "demo@example.com")
+                put("first_name", "Demo")
+                put("last_name", "User")
+            })
+            put("order", JSONObject().apply {
+                put("intent", "AUTH")
+                put("reference_id", referenceId)
+                put("description", "Server-driven demo")
+                put("order_amount", JSONObject().apply {
+                    put("amount_in_cents", 4999)
+                    put("currency", "USD")
+                })
+            })
+        }
+        OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body.toString()) }
+
+        val responseCode = conn.responseCode
+        val stream = if (responseCode in 200..299) conn.inputStream else conn.errorStream
+        val responseText = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        conn.disconnect()
+
+        if (responseCode !in 200..299) {
+            throw RuntimeException("Session creation failed ($responseCode): $responseText")
+        }
+        val json = JSONObject(responseText)
+        return json.getJSONObject("order").getString("checkout_url")
     }
 
     private fun createProductCard(product: Product, index: Int): View {
@@ -277,10 +491,20 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
         SezzleSDK.startCheckout(checkout, this, this, mode = mode)
     }
 
-    override fun onCheckoutComplete(orderUUID: String) {
+    override fun onCheckoutComplete(result: SezzleCheckoutResult) {
         startActivity(Intent(this, ResultActivity::class.java).apply {
-            putExtra(ResultActivity.EXTRA_TYPE, ResultActivity.TYPE_SUCCESS)
-            putExtra(ResultActivity.EXTRA_ORDER_UUID, orderUUID)
+            if (result.orderUUID != null) {
+                // SDK-creates-session flow
+                putExtra(ResultActivity.EXTRA_TYPE, ResultActivity.TYPE_SUCCESS)
+                putExtra(ResultActivity.EXTRA_ORDER_UUID, result.orderUUID)
+            } else if (result.callbackURL != null) {
+                // Server-driven flow
+                putExtra(ResultActivity.EXTRA_TYPE, ResultActivity.TYPE_SUCCESS_CALLBACK)
+                putExtra(ResultActivity.EXTRA_CALLBACK_URL, result.callbackURL.toString())
+            } else {
+                putExtra(ResultActivity.EXTRA_TYPE, ResultActivity.TYPE_ERROR)
+                putExtra(ResultActivity.EXTRA_ERROR_MESSAGE, "No identifier in result")
+            }
         })
     }
 

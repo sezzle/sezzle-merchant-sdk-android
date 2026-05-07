@@ -15,6 +15,28 @@
             </intent-filter>
         </activity>
         <activity android:name=".ResultActivity" />
+
+        <!--
+            Server-driven SYSTEM_BROWSER demo: register an intent-filter for the
+            custom callback scheme this app uses (sezzle-example://checkout).
+            The SDK's bundled manifest only covers `sezzle-sdk://checkout` — merchants
+            using their own scheme with system-browser mode (Chrome <137 / Custom Tabs
+            fallback) must add an entry like this in their own AndroidManifest.
+        -->
+        <activity
+            android:name="com.sezzle.sdk.checkout.SezzleRedirectActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="sezzle-example"
+                    android:host="checkout" />
+            </intent-filter>
+        </activity>
     </application>
 
 </manifest>

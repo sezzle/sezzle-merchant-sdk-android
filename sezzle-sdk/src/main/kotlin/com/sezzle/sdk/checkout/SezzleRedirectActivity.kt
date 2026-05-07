@@ -7,11 +7,16 @@ import android.os.Handler
 import android.os.Looper
 
 /**
- * Fallback redirect handler for browsers that don't support Auth Tab (Chrome < 137).
+ * Redirect handler for the Chrome Custom Tabs system-browser path.
  *
- * Catches sezzle-sdk://checkout/ redirects via intent-filter,
- * dispatches to the checkout listener, and navigates back to the
- * launching activity to clear the Custom Tab from the back stack.
+ * Catches the SDK's default `sezzle-sdk://checkout/` redirects via intent-filter,
+ * dispatches to the checkout listener, and navigates back to the launching activity
+ * to clear the Custom Tab from the back stack.
+ *
+ * **Note:** the SDK ships an intent-filter for `sezzle-sdk://checkout` only.
+ * Merchants using the server-driven entrypoint with a custom scheme must register
+ * an intent-filter for their own scheme in their `AndroidManifest.xml`, pointing
+ * at this activity (or an activity that forwards to [CheckoutHandler.handleCallbackUri]).
  */
 class SezzleRedirectActivity : Activity() {
 
@@ -22,6 +27,8 @@ class SezzleRedirectActivity : Activity() {
         val launchingClassName = CheckoutState.launchingActivityClassName
         val listener = CheckoutState.listener
         val orderUUID = CheckoutState.orderUUID
+        val completeUrl = CheckoutState.completeUrl ?: CheckoutHandler.DEFAULT_COMPLETE_URL
+        val cancelUrl = CheckoutState.cancelUrl ?: CheckoutHandler.DEFAULT_CANCEL_URL
         val uri = intent?.data
 
         // Clear state immediately so the lifecycle observer doesn't fire BrowserDismissed
@@ -37,10 +44,10 @@ class SezzleRedirectActivity : Activity() {
         }
 
         // Dispatch the result AFTER navigation, on the next frame.
-        // This ensures ProductActivity is resumed before the listener starts ResultActivity.
-        if (uri != null && listener != null && orderUUID != null) {
+        // This ensures the launching Activity is resumed before the listener runs.
+        if (uri != null && listener != null) {
             Handler(Looper.getMainLooper()).post {
-                CheckoutHandler.handleCallbackUri(uri, orderUUID, listener)
+                CheckoutHandler.handleCallbackUri(uri, completeUrl, cancelUrl, orderUUID, listener)
             }
         }
 

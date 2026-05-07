@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.sezzle.sdk"
-    compileSdk = 36
+    compileSdk = 35
 
     defaultConfig {
         minSdk = 23
@@ -43,7 +43,9 @@ android {
 }
 
 dependencies {
-    implementation("androidx.browser:browser:1.10.0")
+    // Pinned to 1.8.0: 1.10.0+ requires compileSdk 36, which forces consumer apps onto
+    // 36+ via AAR-metadata checks and breaks merchants still on 35.
+    implementation("androidx.browser:browser:1.8.0")
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("com.google.android.material:material:1.12.0")
 
@@ -57,7 +59,7 @@ afterEvaluate {
             register<MavenPublication>("release") {
                 groupId = "com.sezzle"
                 artifactId = "sezzle-merchant-sdk"
-                version = "1.1.0"
+                version = "1.2.0"
                 from(components["release"])
 
                 pom {
