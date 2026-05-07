@@ -18,7 +18,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - `SezzleEventLogger` no-ops gracefully on the server-driven flow (no public key = no events).
 
 ### Notes
-- The SDK's bundled `AndroidManifest.xml` intent-filter still covers only `sezzle-sdk://checkout`. Merchants using a custom callback scheme with `SYSTEM_BROWSER` mode (and Chrome <137) must register an intent-filter for their scheme in their own manifest. See README → Server-Driven Integration for details.
+- The SDK's bundled `AndroidManifest.xml` intent-filter still covers only `sezzle-sdk://checkout`. Merchants using a custom callback scheme with `SYSTEM_BROWSER` mode must register an intent-filter for their scheme in their own manifest. See README → Server-Driven Integration for details.
+
+### Fixed
+- Pinned `androidx.browser:browser` to `1.8.0` (was `1.10.0`) so consumer apps on `compileSdk 35` are no longer forced onto `compileSdk 36`. Removed the `AuthTabIntent` path (which required 1.10.0) — `SYSTEM_BROWSER` mode now always uses Chrome Custom Tabs, which is fully supported in 1.8.0 and works across all browser versions.
 
 ## [1.1.0] - 2026-04-30
 

@@ -43,7 +43,10 @@ android {
 }
 
 dependencies {
-    implementation("androidx.browser:browser:1.10.0")
+    // Pinned to 1.8.0: 1.10.0 requires compileSdk 36, which forces consumer apps onto 36+
+    // and breaks merchants still on 35. Custom Tabs (used here) is fully supported in 1.8.0;
+    // we lose the AuthTab path (Chrome ≥137) but Custom Tabs covers all browsers.
+    implementation("androidx.browser:browser:1.8.0")
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("com.google.android.material:material:1.12.0")
 

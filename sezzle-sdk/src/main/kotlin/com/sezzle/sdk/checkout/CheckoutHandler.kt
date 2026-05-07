@@ -5,7 +5,6 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import androidx.activity.ComponentActivity
-import androidx.browser.auth.AuthTabIntent
 import androidx.browser.customtabs.CustomTabsIntent
 import com.sezzle.sdk.SezzleCheckoutListener
 import com.sezzle.sdk.SezzleCheckoutResult
@@ -155,11 +154,7 @@ internal class CheckoutHandler(
                 launchWebView(activity, checkoutUri.toString(), orderUUID, completeUrl, cancelUrl, listener)
             }
             SezzleCheckoutMode.SYSTEM_BROWSER -> {
-                if (isAuthTabSupported(activity)) {
-                    launchAuthTab(activity, checkoutUri, orderUUID, completeUrl, cancelUrl, listener)
-                } else {
-                    launchCustomTab(activity, checkoutUri, orderUUID, completeUrl, cancelUrl, listener)
-                }
+                launchCustomTab(activity, checkoutUri, orderUUID, completeUrl, cancelUrl, listener)
             }
         }
     }
@@ -198,48 +193,6 @@ internal class CheckoutHandler(
                 listener.onCheckoutError(error)
             }
         }
-    }
-
-    private fun isAuthTabSupported(activity: ComponentActivity): Boolean {
-        return try {
-            val pm = activity.packageManager
-            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://"))
-            val resolveInfo = pm.resolveActivity(browserIntent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
-            val browserPackage = resolveInfo?.activityInfo?.packageName ?: return false
-            val packageInfo = pm.getPackageInfo(browserPackage, 0)
-            val majorVersion = packageInfo.versionName?.split(".")?.firstOrNull()?.toIntOrNull() ?: 0
-            majorVersion >= 137
-        } catch (_: Exception) {
-            false
-        }
-    }
-
-    private fun launchAuthTab(
-        activity: ComponentActivity,
-        checkoutUri: Uri,
-        orderUUID: String?,
-        completeUrl: Uri,
-        cancelUrl: Uri,
-        listener: SezzleCheckoutListener
-    ) {
-        var resultDelivered = false
-        // AuthTabIntent's callbackScheme is the scheme of the merchant's completeUrl.
-        // Both completeUrl and cancelUrl should share a scheme; we use completeUrl's.
-        val callbackScheme = completeUrl.scheme ?: CALLBACK_SCHEME
-        val launcher = activity.activityResultRegistry.register(
-            "sezzle_checkout_${System.nanoTime()}",
-            AuthTabIntent.AuthenticateUserResultContract()
-        ) { result ->
-            if (resultDelivered) return@register
-            resultDelivered = true
-            if (result.resultCode == AuthTabIntent.RESULT_OK && result.resultUri != null) {
-                handleCallbackUri(result.resultUri!!, completeUrl, cancelUrl, orderUUID, listener)
-            } else {
-                listener.onCheckoutError(SezzleError.BrowserDismissed)
-            }
-        }
-        val authTab = AuthTabIntent.Builder().build()
-        authTab.launch(launcher, checkoutUri, callbackScheme)
     }
 
     private fun launchCustomTab(

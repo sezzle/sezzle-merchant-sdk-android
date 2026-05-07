@@ -7,17 +7,16 @@ import android.os.Handler
 import android.os.Looper
 
 /**
- * Fallback redirect handler for browsers that don't support Auth Tab (Chrome < 137).
+ * Redirect handler for the Chrome Custom Tabs system-browser path.
  *
  * Catches the SDK's default `sezzle-sdk://checkout/` redirects via intent-filter,
- * dispatches to the checkout listener, and navigates back to the
- * launching activity to clear the Custom Tab from the back stack.
+ * dispatches to the checkout listener, and navigates back to the launching activity
+ * to clear the Custom Tab from the back stack.
  *
  * **Note:** the SDK ships an intent-filter for `sezzle-sdk://checkout` only.
- * Merchants using the server-driven entrypoint with a custom scheme who want
- * Chrome <137 fallback support must register an intent-filter for their own
- * scheme in their `AndroidManifest.xml`, pointing at this activity (or an
- * activity that forwards to [CheckoutHandler.handleCallbackUri]).
+ * Merchants using the server-driven entrypoint with a custom scheme must register
+ * an intent-filter for their own scheme in their `AndroidManifest.xml`, pointing
+ * at this activity (or an activity that forwards to [CheckoutHandler.handleCallbackUri]).
  */
 class SezzleRedirectActivity : Activity() {
 

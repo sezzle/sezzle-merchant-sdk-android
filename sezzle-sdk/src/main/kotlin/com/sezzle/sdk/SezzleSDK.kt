@@ -113,12 +113,12 @@ object SezzleSDK {
      * `complete_url`. `result.orderUUID` is `null` because your backend already has it from
      * the session-creation response.
      *
-     * **Manifest note (Chrome <137 / Custom Tabs fallback):** if you use [SezzleCheckoutMode.SYSTEM_BROWSER]
-     * with a callback scheme other than `sezzle-sdk`, register an intent-filter for that scheme
-     * in your own `AndroidManifest.xml` pointing at [com.sezzle.sdk.checkout.SezzleRedirectActivity]
+     * **Manifest note for [SezzleCheckoutMode.SYSTEM_BROWSER]:** if you use a callback scheme
+     * other than `sezzle-sdk`, register an intent-filter for that scheme in your own
+     * `AndroidManifest.xml` pointing at [com.sezzle.sdk.checkout.SezzleRedirectActivity]
      * (or your own forwarding activity that calls `CheckoutHandler.handleCallbackUri`).
-     * The SDK's bundled intent-filter only covers `sezzle-sdk://checkout`. WebView mode and
-     * AuthTab (Chrome ≥137) need no manifest work.
+     * The SDK's bundled intent-filter only covers `sezzle-sdk://checkout`. [SezzleCheckoutMode.WEB_VIEW]
+     * mode needs no manifest work — any scheme is intercepted by the WebView client directly.
      *
      * @param checkoutUrl The `order.checkout_url` from your `POST /v2/session` response.
      * @param completeUrl The same URL you passed as `complete_url.href` in the session request.

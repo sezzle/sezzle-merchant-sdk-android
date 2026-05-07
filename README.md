@@ -300,9 +300,9 @@ override fun onCheckoutComplete(result: SezzleCheckoutResult) {
 }
 ```
 
-### Manifest note for `SYSTEM_BROWSER` mode (Custom Tabs fallback)
+### Manifest note for `SYSTEM_BROWSER` mode
 
-The SDK ships an intent-filter for `sezzle-sdk://checkout` only. If you use `SYSTEM_BROWSER` mode with a custom callback scheme **and** a user lands on Chrome <137 (where AuthTab isn't available and the SDK falls back to Chrome Custom Tabs), you must register an intent-filter for your scheme in your own `AndroidManifest.xml`, pointing at `SezzleRedirectActivity`:
+`SYSTEM_BROWSER` mode opens checkout in Chrome Custom Tabs and routes the redirect back to your app via the OS intent system. The SDK ships an intent-filter for `sezzle-sdk://checkout` only — if you use a custom callback scheme, register an intent-filter for your scheme in your own `AndroidManifest.xml`, pointing at `SezzleRedirectActivity`:
 
 ```xml
 <activity
@@ -320,7 +320,7 @@ The SDK ships an intent-filter for `sezzle-sdk://checkout` only. If you use `SYS
 </activity>
 ```
 
-`WEB_VIEW` mode and AuthTab (Chrome ≥137) need no manifest work.
+`WEB_VIEW` mode needs no manifest work — any scheme is intercepted by the WebView client directly.
 
 ### Notes
 

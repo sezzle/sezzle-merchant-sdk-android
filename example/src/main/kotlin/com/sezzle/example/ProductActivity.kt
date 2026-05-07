@@ -172,7 +172,7 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
             orientation = LinearLayout.HORIZONTAL
         }
 
-        // System Browser (Chrome AuthTab / Custom Tabs)
+        // System Browser (Chrome Custom Tabs)
         val browserButton = Button(this).apply {
             text = "System Browser"
             setTextColor(Color.WHITE)
@@ -231,9 +231,8 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
     /**
      * System Browser mode demo: custom-scheme callback URLs.
      * The example app's AndroidManifest.xml registers an intent-filter for
-     * `sezzle-example://checkout` pointing at SezzleRedirectActivity — without that,
-     * the Custom Tabs fallback (Chrome <137) wouldn't route the redirect back into
-     * the app. AuthTab (Chrome ≥137) doesn't need it.
+     * `sezzle-example://checkout` pointing at SezzleRedirectActivity — without it,
+     * Chrome Custom Tabs wouldn't route the redirect back into the app.
      */
     private fun startServerDrivenSystemBrowserDemo() {
         val orderRef = "poshmark-demo-${(1000..9999).random()}"
