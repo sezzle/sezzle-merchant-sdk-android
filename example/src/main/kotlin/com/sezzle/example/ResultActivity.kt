@@ -1,5 +1,6 @@
 package com.sezzle.example
 
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -96,11 +97,22 @@ class ResultActivity : AppCompatActivity() {
             TYPE_ERROR -> buildError(stack)
         }
 
-        // Back button
+        // Back button — explicit Intent to ProductActivity instead of plain finish().
+        // Reason: Android can destroy ProductActivity while it's paused behind the WebView
+        // / Custom Tab during checkout (memory pressure on emulators especially). If we just
+        // finish() here and ProductActivity is no longer in the stack, the task ends and the
+        // app appears to exit. CLEAR_TOP | SINGLE_TOP dedupes if ProductActivity is still
+        // alive; otherwise a fresh instance is launched on top of nothing.
         val backButton = Button(this).apply {
             text = "Back to Product"
             isAllCaps = false
-            setOnClickListener { finish() }
+            setOnClickListener {
+                val intent = Intent(this@ResultActivity, ProductActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                }
+                startActivity(intent)
+                finish()
+            }
         }
         stack.addView(backButton, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,

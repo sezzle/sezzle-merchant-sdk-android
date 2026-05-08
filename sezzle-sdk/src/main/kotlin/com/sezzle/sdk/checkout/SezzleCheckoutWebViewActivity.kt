@@ -17,6 +17,8 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.sezzle.sdk.SezzleCheckoutListener
 import com.sezzle.sdk.SezzleCheckoutResult
 import com.sezzle.sdk.models.SezzleError
@@ -170,6 +172,15 @@ class SezzleCheckoutWebViewActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         ))
+
+        // Android 14+ renders activities edge-to-edge by default, which would push our
+        // close-button header behind the system status bar. Inset the root with the
+        // status-bar height so the header stays tappable.
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(0, systemBars.top, 0, systemBars.bottom)
+            insets
+        }
 
         webView.loadUrl(urlWithParam)
     }
