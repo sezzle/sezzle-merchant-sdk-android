@@ -4,6 +4,15 @@ All notable changes to the Sezzle Merchant SDK for Android will be documented in
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.1] - 2026-05-08
+
+### Fixed
+- **WebView checkout: close button now visible on Android 14+.** `SezzleCheckoutWebViewActivity` was rendering edge-to-edge with the white close-button header positioned behind the system status bar (`Theme.NoTitleBar` doesn't apply window insets on modern Android). Added `OnApplyWindowInsetsListener` on the root view that pads top + bottom by `systemBars` insets so the header is fully visible.
+- **Reject overlapping `startCheckout` calls.** Rapid double-taps on a checkout button used to fire a second `startCheckout` while the first was still presenting, which could confuse Custom Tabs / WebView presentation and surface a bogus `onCheckoutError` to the merchant. `SezzleSDK` now tracks an in-progress flag and silently ignores overlapping calls until the first delivers its terminal callback. The flag is cleared via a `ProgressTrackingListener` wrapper.
+
+### Example app
+- **Back to Product** routes through an explicit `Intent(ProductActivity)` with `FLAG_ACTIVITY_CLEAR_TOP | FLAG_ACTIVITY_SINGLE_TOP` instead of bare `finish()`. Defends against Android killing the paused `ProductActivity` during checkout under memory pressure (a real intermittent reproduction on Pixel 8a emulator), which would otherwise close the entire task and look like a crash to the user. Doesn't affect SDK consumers — merchants manage their own back-stack — but improves the demo experience.
+
 ## [1.2.0] - 2026-05-06
 
 ### Added

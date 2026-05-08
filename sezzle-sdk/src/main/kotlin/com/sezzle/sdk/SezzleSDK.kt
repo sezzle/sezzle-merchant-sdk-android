@@ -34,6 +34,7 @@ object SezzleSDK {
     private var publicKey: String? = null
     private var environment: SezzleEnvironment? = null
     private var lifecycleCallbacksRegistered = false
+    private var isCheckoutInProgress = false
 
     /**
      * Configure the SDK with your Sezzle public key.
@@ -86,6 +87,12 @@ object SezzleSDK {
             return
         }
 
+        // Reject overlapping calls (e.g. rapid double-tap). A second startCheckout
+        // before the first delivers its result can confuse Custom Tabs / WebView
+        // presentation and surface a bogus checkoutDidFail to the merchant.
+        if (isCheckoutInProgress) return
+        isCheckoutInProgress = true
+
         if (mode == SezzleCheckoutMode.SYSTEM_BROWSER) {
             registerLifecycleCallbacks(activity)
         }
@@ -94,7 +101,8 @@ object SezzleSDK {
         val sessionService = SessionService(httpClient)
         val eventLogger = SezzleEventLogger(key, env)
         val handler = CheckoutHandler(sessionService, eventLogger)
-        handler.startCheckout(checkout, componentActivity, listener, mode)
+        val wrappedListener = ProgressTrackingListener(listener) { isCheckoutInProgress = false }
+        handler.startCheckout(checkout, componentActivity, wrappedListener, mode)
     }
 
     /**
@@ -141,6 +149,10 @@ object SezzleSDK {
             return
         }
 
+        // Reject overlapping calls (see notes on the SezzleCheckout overload above).
+        if (isCheckoutInProgress) return
+        isCheckoutInProgress = true
+
         if ((activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             validateUrls(checkoutUrl, completeUrl, cancelUrl)
         }
@@ -151,7 +163,8 @@ object SezzleSDK {
 
         // No HttpClient, no SessionService, no EventLogger — pass-URL flow doesn't need them.
         val handler = CheckoutHandler(sessionService = null, eventLogger = null)
-        handler.startCheckout(checkoutUrl, completeUrl, cancelUrl, componentActivity, listener, mode)
+        val wrappedListener = ProgressTrackingListener(listener) { isCheckoutInProgress = false }
+        handler.startCheckout(checkoutUrl, completeUrl, cancelUrl, componentActivity, wrappedListener, mode)
     }
 
     /** Whether the SDK has been configured. */
@@ -196,5 +209,28 @@ object SezzleSDK {
                 override fun onActivityDestroyed(a: Activity) {}
             }
         )
+    }
+}
+
+/**
+ * Wraps a merchant-supplied listener so SezzleSDK can clear its in-progress
+ * flag on terminal callbacks (complete / cancel / error). Allows the SDK to
+ * reject overlapping `startCheckout` calls without leaking the gate state.
+ */
+private class ProgressTrackingListener(
+    private val wrapped: SezzleCheckoutListener,
+    private val onTerminal: () -> Unit
+) : SezzleCheckoutListener {
+    override fun onCheckoutComplete(result: SezzleCheckoutResult) {
+        onTerminal()
+        wrapped.onCheckoutComplete(result)
+    }
+    override fun onCheckoutCancel() {
+        onTerminal()
+        wrapped.onCheckoutCancel()
+    }
+    override fun onCheckoutError(error: SezzleError) {
+        onTerminal()
+        wrapped.onCheckoutError(error)
     }
 }
