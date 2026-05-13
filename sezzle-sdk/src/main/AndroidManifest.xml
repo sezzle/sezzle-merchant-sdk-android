@@ -11,6 +11,7 @@
             android:name=".checkout.SezzleRedirectActivity"
             android:exported="true"
             android:launchMode="singleTask"
+            android:taskAffinity=""
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -26,6 +27,7 @@
         <activity
             android:name=".checkout.SezzleCheckoutWebViewActivity"
             android:exported="false"
+            android:taskAffinity=""
             android:theme="@android:style/Theme.NoTitleBar" />
     </application>
 
