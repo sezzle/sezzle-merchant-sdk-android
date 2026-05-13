@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -51,6 +52,14 @@ class SezzleCheckoutWebViewActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Block screenshots, screen recording, and Recent-Apps thumbnails on the
+        // checkout screen — the WebView hosts a payment page where the user enters
+        // card/bank credentials.
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE,
+        )
 
         val checkoutUrl = intent.getStringExtra(EXTRA_CHECKOUT_URL)
         orderUUID = intent.getStringExtra(EXTRA_ORDER_UUID)
