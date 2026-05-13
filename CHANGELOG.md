@@ -4,6 +4,14 @@ All notable changes to the Sezzle Merchant SDK for Android will be documented in
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.3] - 2026-05-14
+
+### Security
+- **`FLAG_SECURE` extended to `SezzleRedirectActivity`.** Completes the FLAG_SECURE coverage of every SDK-owned activity. The redirect activity is `Theme.Translucent.NoTitleBar` and renders nothing on screen, so the practical screenshot/Recent-Apps protection is unchanged from 1.2.2 — but the flag is now uniformly present across the SDK's activity surface, removing the inconsistency a posture scanner would flag.
+
+### Compatibility
+- No public API change. No new permissions. No manifest changes required of merchants. No behavior change for either checkout flow (SDK-creates-session, server-driven) or either presentation mode (`SYSTEM_BROWSER`, `WEB_VIEW`). Existing integrations recompile without modification.
+
 ## [1.2.2] - 2026-05-13
 
 ### Security
