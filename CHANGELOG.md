@@ -4,6 +4,18 @@ All notable changes to the Sezzle Merchant SDK for Android will be documented in
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.2] - 2026-05-13
+
+### Security
+- **`FLAG_SECURE` enabled on `SezzleCheckoutWebViewActivity`.** Blocks manual screenshots, screen recording, the Recent Apps switcher live preview, and mirroring to external displays / casting while the WebView checkout is on screen. Scoped to this activity only — `SYSTEM_BROWSER` mode is unchanged (Chrome Custom Tabs owns its own window and applies its own screenshot policy on payment domains).
+- **Checkout activities isolated into their own task affinity.** Added `android:taskAffinity=""` to both `SezzleRedirectActivity` (exported, `singleTask` — the classic StrandHogg target shape) and `SezzleCheckoutWebViewActivity` (defensive against StrandHogg 2.0 reparenting) in the SDK's bundled `AndroidManifest.xml`. Mitigates StrandHogg 1.0 and StrandHogg 2.0 / CVE-2020-0096 task-hijacking attacks where a malicious app overlays a spoofed UI by abusing default task affinity. Belt-and-suspenders posture for the SDK's `minSdk = 23` range, since Google's CVE-2020-0096 patches don't cover older OS versions still in the field.
+
+### Example app
+- `android:allowBackup="false"` on `example/src/main/AndroidManifest.xml` (was `true`, the historical AGP default). The example stores nothing, so this is a posture change only — but it nudges merchants copying from the canonical reference integration toward the correct payment-app default and clears the corresponding security-scanner finding pre-emptively.
+
+### Compatibility
+- No public API change. No new permissions. No manifest changes required of merchants. No behavior change for either checkout flow (SDK-creates-session, server-driven) or either presentation mode (`SYSTEM_BROWSER`, `WEB_VIEW`). Existing integrations recompile without modification.
+
 ## [1.2.1] - 2026-05-08
 
 ### Fixed
