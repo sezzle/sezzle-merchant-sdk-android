@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.WindowManager
 
 /**
  * Redirect handler for the Chrome Custom Tabs system-browser path.
@@ -22,6 +23,15 @@ class SezzleRedirectActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Defense-in-depth: FLAG_SECURE on the redirect activity. The activity is
+        // Theme.Translucent.NoTitleBar and renders nothing — practically a no-op,
+        // but it removes the activity from posture-scanner findings for SDKs whose
+        // task affinity could in theory be inspected mid-redirect.
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE,
+        )
 
         // Snapshot state BEFORE clearing — order matters
         val launchingClassName = CheckoutState.launchingActivityClassName
