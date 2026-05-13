@@ -3,7 +3,7 @@
 
     <application
         android:name=".ExampleApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:label="Sezzle SDK Example"
         android:theme="@style/Theme.SezzleExample">
         <activity
