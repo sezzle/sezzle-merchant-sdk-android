@@ -4,6 +4,19 @@ All notable changes to the Sezzle Merchant SDK for Android will be documented in
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.4] - 2026-05-19
+
+### Fixed
+- **WebView OAuth popups now stay in-app.** `SezzleCheckoutWebViewActivity` previously routed every `window.open` popup out to the system browser via `Intent.ACTION_VIEW` (correct for TILA docs, marketplace links — wrong for "Sign in with Apple" and other OAuth providers that use `response_mode=web_message` and need `window.opener.postMessage` back to the parent). Popups to known auth hosts (`appleid.apple.com`, `accounts.google.com`, `*.facebook.com`) now render in a fullscreen `Dialog` overlay that maintains the opener relationship; the overlay closes itself when the OAuth library calls `window.close()` after handshake completion. Non-auth popups still route externally (preserves existing TILA / marketplace-link behavior). `FLAG_SECURE` is inherited by the overlay so the auth UI is screenshot-blocked like the main checkout. (MOBILE-8460 item 1)
+- **Widget info modal: prevent duplicate modals on rapid taps.** `SezzlePromotionalView` now tracks whether its info modal is currently presented and rejects overlapping taps until dismiss. Mirrors the `SezzleSDK.startCheckout` overlap protection shipped in 1.2.1. (MOBILE-7954)
+
+### Changed
+- **Widget info modal close affordance.** Added a top-right ✕ close button to `SezzleInfoModal` alongside the existing drag handle. Tap-out and swipe-down dismissals still work — the X is a supplementary affordance for users who prefer an explicit close target, matching the iOS modal. Tap target sized to ~48dp per Material guidelines. (MOBILE-7951)
+- **Checkout WebView close button: larger tap target.** Bumped `SezzleCheckoutWebViewActivity`'s ✕ glyph size (18→22 sp) and inflated the surrounding padding so the hit area lands at ~48dp per Material's minimum-touch-target guideline. Contrast unchanged. Added `contentDescription = "Close checkout"` for accessibility. (MOBILE-7956)
+
+### Compatibility
+- No public API change. No new permissions. No manifest changes required of merchants. No behavior change for either checkout flow (SDK-creates-session, server-driven). Existing integrations recompile without modification.
+
 ## [1.2.3] - 2026-05-14
 
 ### Security
