@@ -6,6 +6,7 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -29,14 +30,16 @@ object SezzleInfoModal {
         currency: String = "USD",
         activity: Activity,
         widgetType: SezzleWidgetType? = null,
-        widgetConfig: SezzleWidgetConfig = SezzleWidgetConfig.DEFAULT
+        widgetConfig: SezzleWidgetConfig = SezzleWidgetConfig.DEFAULT,
+        onDismiss: () -> Unit = {}
     ) {
         val type = widgetType ?: InstallmentCalculator.widgetType(amountInCents, widgetConfig)
         val isDark = (activity.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
         val modalBg = if (isDark) SezzleBrand.MODAL_BG_DARK_MODE else SezzleBrand.MODAL_BG
 
         val dialog = BottomSheetDialog(activity)
-        dialog.setContentView(buildContent(activity, amountInCents, currency, type, widgetConfig))
+        dialog.setOnDismissListener { onDismiss() }
+        dialog.setContentView(buildContent(activity, amountInCents, currency, type, widgetConfig, onClose = { dialog.dismiss() }))
         // Replace default background with matching modal color to fix corner artifacts
         dialog.setOnShowListener {
             val bottomSheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
@@ -55,7 +58,8 @@ object SezzleInfoModal {
         amountInCents: Int,
         currency: String,
         widgetType: SezzleWidgetType,
-        widgetConfig: SezzleWidgetConfig
+        widgetConfig: SezzleWidgetConfig,
+        onClose: () -> Unit
     ): View {
         val density = activity.resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
@@ -81,7 +85,10 @@ object SezzleInfoModal {
             background = bg
         }
 
-        // Grab handle
+        // Top row: drag handle (centered) + close X (top-right). Matches the iOS modal's
+        // close affordance (SezzleInfoModal.swift navigationItem.leftBarButtonItem). Tap-out
+        // and swipe-down still work — this is an unambiguous additional dismiss path.
+        val topRow = FrameLayout(activity)
         val handle = View(activity).apply {
             val handleBg = GradientDrawable().apply {
                 setColor(handleColor)
@@ -89,8 +96,28 @@ object SezzleInfoModal {
             }
             background = handleBg
         }
-        container.addView(handle, LinearLayout.LayoutParams(dp(40), dp(4)).apply {
-            gravity = Gravity.CENTER_HORIZONTAL
+        topRow.addView(handle, FrameLayout.LayoutParams(dp(40), dp(4)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL or Gravity.TOP
+            topMargin = dp(6)
+        })
+        val closeButton = TextView(activity).apply {
+            text = "✕"
+            setTextColor(textPrimary)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            // Inflate hit area to ~48dp without enlarging the glyph
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            setOnClickListener { onClose() }
+            contentDescription = "Close"
+        }
+        topRow.addView(closeButton, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.TOP or Gravity.END
+        ))
+        container.addView(topRow, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
             bottomMargin = dp(16)
         })
 

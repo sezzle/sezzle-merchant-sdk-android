@@ -33,6 +33,10 @@ class SezzlePromotionalView @JvmOverloads constructor(
 
     private val messageView: TextView
     private var presenterRef: WeakReference<Activity>? = null
+    // Mirrors SezzleSDK's startCheckout overlap protection (1.2.1): rapid double-taps
+    // on the widget used to open multiple stacked info modals. Track in-progress state
+    // and reject overlapping taps until the current modal dismisses.
+    private var isModalShowing = false
 
     init {
         messageView = TextView(context).apply {
@@ -50,9 +54,18 @@ class SezzlePromotionalView @JvmOverloads constructor(
         addView(messageView, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.START))
 
         setOnClickListener {
+            if (isModalShowing) return@setOnClickListener
             presenterRef?.get()?.let { activity ->
                 val type = InstallmentCalculator.widgetType(amountInCents, widgetConfig)
-                SezzleInfoModal.present(amountInCents, currency, activity, type, widgetConfig)
+                isModalShowing = true
+                SezzleInfoModal.present(
+                    amountInCents,
+                    currency,
+                    activity,
+                    type,
+                    widgetConfig,
+                    onDismiss = { isModalShowing = false },
+                )
             }
         }
 
