@@ -186,11 +186,13 @@ class SezzleCheckoutContractTest {
         // After parseResult runs (the contract's terminal hook), the gate must be cleared so the
         // next checkout call can proceed.
         val launcher = SezzleSDKTestFakeLauncher()
+        val onError: (com.sezzle.sdk.models.SezzleError) -> Unit = { /* no-op for gate test */ }
         SezzleSDK.startCheckoutForResult(
             launcher = launcher,
             checkoutUrl = "https://sandbox.checkout.sezzle.com/?id=abc",
             completeUrl = Uri.parse("sezzle-sdk://checkout/confirmed"),
             cancelUrl = Uri.parse("sezzle-sdk://checkout/cancelled"),
+            onError = onError,
         )
 
         // Until parseResult fires, the gate should be held: a second call returns silently.
@@ -199,6 +201,7 @@ class SezzleCheckoutContractTest {
             checkoutUrl = "https://sandbox.checkout.sezzle.com/?id=second",
             completeUrl = Uri.parse("sezzle-sdk://checkout/confirmed"),
             cancelUrl = Uri.parse("sezzle-sdk://checkout/cancelled"),
+            onError = onError,
         )
         assertEquals("only the first launch should fire while gate is held", 1, launcher.launches.size)
 
@@ -214,6 +217,7 @@ class SezzleCheckoutContractTest {
             checkoutUrl = "https://sandbox.checkout.sezzle.com/?id=third",
             completeUrl = Uri.parse("sezzle-sdk://checkout/confirmed"),
             cancelUrl = Uri.parse("sezzle-sdk://checkout/cancelled"),
+            onError = onError,
         )
         assertEquals("gate cleared — next launch fires", 2, launcher.launches.size)
     }

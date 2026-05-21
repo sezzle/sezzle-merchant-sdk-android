@@ -282,18 +282,26 @@ internal class CheckoutHandler(
                 onSessionReady(response.uuid, checkoutUUID)
 
                 mainHandler.post {
-                    val checkoutUri = Uri.parse(response.checkoutURL).buildUpon()
-                        .appendQueryParameter("isWebView", "true")
-                        .build()
-                    launcher.launch(
-                        SezzleCheckoutContract.Input(
-                            checkoutUrl = checkoutUri.toString(),
-                            orderUuid = response.orderUUID,
-                            completeUrl = DEFAULT_COMPLETE_URL,
-                            cancelUrl = DEFAULT_CANCEL_URL,
+                    try {
+                        val checkoutUri = Uri.parse(response.checkoutURL).buildUpon()
+                            .appendQueryParameter("isWebView", "true")
+                            .build()
+                        launcher.launch(
+                            SezzleCheckoutContract.Input(
+                                checkoutUrl = checkoutUri.toString(),
+                                orderUuid = response.orderUUID,
+                                completeUrl = DEFAULT_COMPLETE_URL,
+                                cancelUrl = DEFAULT_CANCEL_URL,
+                            )
                         )
-                    )
-                    onLaunched()
+                        onLaunched()
+                    } catch (t: Throwable) {
+                        // launcher.launch throws IllegalStateException if the host activity
+                        // (and its ActivityResultRegistry) was destroyed during the in-flight
+                        // createSession call. Route to onError instead of crashing the main
+                        // looper, and let the SezzleSDK wrapper clear the in-flight gate.
+                        onError(SezzleError.NetworkError(t))
+                    }
                 }
             },
             onError = { error ->

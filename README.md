@@ -209,9 +209,19 @@ class MyActivity : ComponentActivity() {
     }
 
     // Later, at checkout time:
-    SezzleSDK.startCheckoutForResult(sezzleLauncher, checkout)
+    SezzleSDK.startCheckoutForResult(
+        launcher = sezzleLauncher,
+        checkout = checkout,
+        onError = { /* pre-launch failure: NotConfigured / NetworkError / ApiError */ },
+    )
     // ...or, for the server-driven flow:
-    SezzleSDK.startCheckoutForResult(sezzleLauncher, checkoutUrl, completeUrl, cancelUrl)
+    SezzleSDK.startCheckoutForResult(
+        launcher = sezzleLauncher,
+        checkoutUrl = checkoutUrl,
+        completeUrl = completeUrl,
+        cancelUrl = cancelUrl,
+        onError = { /* launcher.launch threw — host activity gone */ },
+    )
 }
 ```
 

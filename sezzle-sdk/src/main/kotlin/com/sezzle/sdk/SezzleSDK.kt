@@ -227,14 +227,19 @@ object SezzleSDK {
      * @param launcher The merchant's registered launcher. Must be registered before
      *                 the host activity reaches STARTED.
      * @param checkout The customer and order data for this checkout.
-     * @param onError Called synchronously if the SDK isn't configured or another precondition
-     *                fails before the launcher can be invoked. Once the launcher fires,
-     *                errors are delivered through it instead.
+     * @param onError Called when a pre-launch failure prevents the launcher from firing —
+     *                SDK not configured ([SezzleError.NotConfigured]), session creation
+     *                fails ([SezzleError.NetworkError], [SezzleError.ApiError]), or the
+     *                merchant's launcher was already unregistered by the time we tried to
+     *                launch ([SezzleError.NetworkError] wrapping `IllegalStateException`).
+     *                **Required** — a default no-op would silently eat these errors and
+     *                leave the merchant's checkout button looking unresponsive. Once the
+     *                launcher fires, all subsequent errors are delivered through it.
      */
     fun startCheckoutForResult(
         launcher: ActivityResultLauncher<SezzleCheckoutContract.Input>,
         checkout: SezzleCheckout,
-        onError: (SezzleError) -> Unit = {},
+        onError: (SezzleError) -> Unit,
     ) {
         val key = publicKey
         val env = environment
@@ -287,12 +292,18 @@ object SezzleSDK {
      * @param checkoutUrl The `order.checkout_url` from your session-creation response.
      * @param completeUrl The same URL you passed as `complete_url.href`.
      * @param cancelUrl The same URL you passed as `cancel_url.href`.
+     * @param onError Called when `launcher.launch(...)` throws — typically because the
+     *                merchant's host activity (and its `ActivityResultRegistry`) was
+     *                destroyed before this call ran. Mirrors the [SezzleCheckout]
+     *                overload's error channel so a single `onError` handler works for
+     *                both entrypoints.
      */
     fun startCheckoutForResult(
         launcher: ActivityResultLauncher<SezzleCheckoutContract.Input>,
         checkoutUrl: String,
         completeUrl: Uri,
         cancelUrl: Uri,
+        onError: (SezzleError) -> Unit,
     ) {
         if (isCheckoutInProgress) return
         isCheckoutInProgress = true
@@ -300,7 +311,9 @@ object SezzleSDK {
         val handler = CheckoutHandler(sessionService = null, eventLogger = null)
         // Gate is held until the terminal result arrives — see [notifyLauncherCheckoutEnded],
         // called from [SezzleCheckoutContract.parseResult]. If launcher.launch throws (e.g.
-        // unregistered launcher), the catch clears the gate to avoid stranding the SDK.
+        // unregistered launcher), route via onError + clear the gate so the merchant gets a
+        // signal and the SDK doesn't strand. Same channel as the SDK-creates-session
+        // overload — consistent API surface across both entrypoints.
         try {
             handler.startCheckoutForResult(
                 checkoutUrl = checkoutUrl,
@@ -310,7 +323,7 @@ object SezzleSDK {
             )
         } catch (t: Throwable) {
             isCheckoutInProgress = false
-            throw t
+            onError(SezzleError.NetworkError(t))
         }
     }
 

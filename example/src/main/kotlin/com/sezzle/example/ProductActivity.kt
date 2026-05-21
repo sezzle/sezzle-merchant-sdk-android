@@ -300,6 +300,7 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
                             checkoutUrl = checkoutUrl,
                             completeUrl = completeUrl,
                             cancelUrl = cancelUrl,
+                            onError = { onCheckoutError(it) },
                         )
                     } else {
                         SezzleSDK.startCheckout(
@@ -539,7 +540,11 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
         // mid-checkout — "Don't keep activities", low-memory, etc.). System-browser mode
         // continues to use the listener-based API.
         if (mode == SezzleCheckoutMode.WEB_VIEW) {
-            SezzleSDK.startCheckoutForResult(sezzleCheckoutLauncher, checkout)
+            SezzleSDK.startCheckoutForResult(
+                launcher = sezzleCheckoutLauncher,
+                checkout = checkout,
+                onError = { onCheckoutError(it) },
+            )
         } else {
             SezzleSDK.startCheckout(checkout, this, this, mode = mode)
         }
@@ -567,6 +572,17 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
     }
 
     override fun onCheckoutError(error: SezzleError) {
+        // The listener-based API surfaces user-dismissal (X tap, back press, Custom Tabs
+        // close) as SezzleError.BrowserDismissed for historical reasons — that's not really
+        // an "error" from the user's perspective. Route it to the Cancelled screen so the
+        // System Browser flow's dismissal UX matches the WebView launcher path's, which
+        // already routes dismissal to Output.Cancel.
+        if (error is SezzleError.BrowserDismissed) {
+            startActivity(Intent(this, ResultActivity::class.java).apply {
+                putExtra(ResultActivity.EXTRA_TYPE, ResultActivity.TYPE_CANCELLED)
+            })
+            return
+        }
         startActivity(Intent(this, ResultActivity::class.java).apply {
             putExtra(ResultActivity.EXTRA_TYPE, ResultActivity.TYPE_ERROR)
             putExtra(ResultActivity.EXTRA_ERROR_MESSAGE, error.message)
