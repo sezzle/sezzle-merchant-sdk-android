@@ -39,6 +39,22 @@ object SezzleSDK {
     private var isCheckoutInProgress = false
 
     /**
+     * Per-in-flight-checkout context for emitting terminal analytics events
+     * (SUCCESS / CANCEL / FAILURE) on the launcher path. Captured during
+     * SDK-creates-session [startCheckoutForResult] after the session API call
+     * succeeds; consumed by [notifyLauncherCheckoutEnded]. Null for the
+     * server-driven launcher path (no public key on-device → no event logging).
+     */
+    private var pendingLauncherEventContext: LauncherEventContext? = null
+
+    private data class LauncherEventContext(
+        val eventLogger: SezzleEventLogger,
+        val sessionUUID: String,
+        val checkoutUUID: String,
+        val mode: String,
+    )
+
+    /**
      * Configure the SDK with your Sezzle public key.
      *
      * Required only for the SDK-creates-session flow. The server-driven entrypoint
@@ -245,6 +261,19 @@ object SezzleSDK {
                 onError(error)
             },
             onLaunched = { /* leave gate set; parseResult clears it on result */ },
+            onSessionReady = { sessionUUID, checkoutUUID ->
+                // Capture context for the terminal analytics events (SUCCESS/CANCEL/FAILURE).
+                // The launcher path has no listener to wrap, so we fire from
+                // notifyLauncherCheckoutEnded() instead. Server-driven path doesn't go
+                // through createSession and never sets this — server-driven flow has no
+                // event logging by design (no public key on-device).
+                pendingLauncherEventContext = LauncherEventContext(
+                    eventLogger = eventLogger,
+                    sessionUUID = sessionUUID,
+                    checkoutUUID = checkoutUUID,
+                    mode = "webview",
+                )
+            },
         )
     }
 
@@ -287,12 +316,43 @@ object SezzleSDK {
 
     /**
      * Called by [SezzleCheckoutContract.parseResult] when a launcher-based checkout
-     * terminates. Clears the overlap gate so the next checkout can proceed.
+     * terminates. Clears the overlap gate and emits the terminal analytics event
+     * (SUCCESS / CANCEL / FAILURE) if event-logging context was captured at session
+     * creation — i.e. only for the SDK-creates-session launcher overload. The
+     * server-driven launcher overload has no event-logging context and emits no events,
+     * matching the legacy server-driven path's behavior.
      *
      * Internal — merchants should never invoke this directly.
      */
-    internal fun notifyLauncherCheckoutEnded() {
+    internal fun notifyLauncherCheckoutEnded(output: SezzleCheckoutContract.Output) {
         isCheckoutInProgress = false
+
+        val ctx = pendingLauncherEventContext
+        pendingLauncherEventContext = null
+        if (ctx == null) return
+
+        when (output) {
+            is SezzleCheckoutContract.Output.Complete -> ctx.eventLogger.log(
+                event = SezzleEventLogger.Event.SUCCESS,
+                sessionUUID = ctx.sessionUUID,
+                orderUUID = output.orderUuid ?: "",
+                checkoutUUID = ctx.checkoutUUID,
+                mode = ctx.mode,
+            )
+            SezzleCheckoutContract.Output.Cancel -> ctx.eventLogger.log(
+                event = SezzleEventLogger.Event.CANCEL,
+                sessionUUID = ctx.sessionUUID,
+                checkoutUUID = ctx.checkoutUUID,
+                mode = ctx.mode,
+            )
+            is SezzleCheckoutContract.Output.Error -> ctx.eventLogger.log(
+                event = SezzleEventLogger.Event.FAILURE,
+                sessionUUID = ctx.sessionUUID,
+                checkoutUUID = ctx.checkoutUUID,
+                mode = ctx.mode,
+                message = output.message,
+            )
+        }
     }
 
     /** Whether the SDK has been configured. */

@@ -249,6 +249,12 @@ internal class CheckoutHandler(
         launcher: ActivityResultLauncher<SezzleCheckoutContract.Input>,
         onError: (SezzleError) -> Unit,
         onLaunched: () -> Unit,
+        // Fired after createSession succeeds, with enough context for the SDK to log
+        // terminal analytics events (SUCCESS/CANCEL/FAILURE) when parseResult fires.
+        // Without this, the launcher path would emit only POPUP_CREATED and LOADED —
+        // the legacy startCheckout path emits the terminal events via wrapWithEventLogging
+        // around the merchant's listener, but the launcher path has no listener to wrap.
+        onSessionReady: (sessionUUID: String, checkoutUUID: String) -> Unit,
     ) {
         val service = sessionService
         if (service == null) {
@@ -272,6 +278,8 @@ internal class CheckoutHandler(
                     checkoutUUID = checkoutUUID,
                     mode = checkoutMode
                 )
+
+                onSessionReady(response.uuid, checkoutUUID)
 
                 mainHandler.post {
                     val checkoutUri = Uri.parse(response.checkoutURL).buildUpon()

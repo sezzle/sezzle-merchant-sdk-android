@@ -140,35 +140,37 @@ class SezzleCheckoutContract : ActivityResultContract<SezzleCheckoutContract.Inp
     }
 
     override fun parseResult(resultCode: Int, intent: Intent?): Output {
-        // Clear the SDK's overlap gate now that the checkout has terminated, regardless
-        // of result type. Without this, the gate stays set forever if the merchant launches
-        // via [SezzleSDK.startCheckoutForResult] (which sets the gate but no longer clears
-        // it immediately — see notes there).
-        SezzleSDK.notifyLauncherCheckoutEnded()
-
         // RESULT_CANCELED with no intent extras is what the system delivers when the
         // checkout activity was destroyed without setResult — e.g. swiped from Recents,
         // or the user pressed Home → back-to-app under a memory-pressure scenario where
         // the system killed the activity. Treat as cancellation, not error.
-        if (resultCode == Activity.RESULT_CANCELED && intent == null) {
-            return Output.Cancel
+        val output: Output = if (resultCode == Activity.RESULT_CANCELED && intent == null) {
+            Output.Cancel
+        } else {
+            val type = intent?.getStringExtra(RESULT_TYPE_KEY)
+            when (type) {
+                RESULT_TYPE_COMPLETE -> Output.Complete(
+                    orderUuid = intent.getStringExtra(RESULT_ORDER_UUID_KEY),
+                    callbackUrl = intent.getStringExtra(RESULT_CALLBACK_URL_KEY)?.let(Uri::parse),
+                )
+                RESULT_TYPE_CANCEL -> Output.Cancel
+                RESULT_TYPE_ERROR -> Output.Error(
+                    code = intent.getStringExtra(RESULT_ERROR_CODE_KEY) ?: ErrorCode.INVALID_RESPONSE,
+                    message = intent.getStringExtra(RESULT_ERROR_MESSAGE_KEY) ?: "Unknown error",
+                )
+                // Result-OK but no type extra means the activity set a result via the wrong
+                // path. Shouldn't happen in practice; treat as a defensive failure.
+                else -> Output.Error(ErrorCode.NO_RESULT, "Checkout activity finished without delivering a result")
+            }
         }
 
-        val type = intent?.getStringExtra(RESULT_TYPE_KEY)
-        return when (type) {
-            RESULT_TYPE_COMPLETE -> Output.Complete(
-                orderUuid = intent.getStringExtra(RESULT_ORDER_UUID_KEY),
-                callbackUrl = intent.getStringExtra(RESULT_CALLBACK_URL_KEY)?.let(Uri::parse),
-            )
-            RESULT_TYPE_CANCEL -> Output.Cancel
-            RESULT_TYPE_ERROR -> Output.Error(
-                code = intent.getStringExtra(RESULT_ERROR_CODE_KEY) ?: ErrorCode.INVALID_RESPONSE,
-                message = intent.getStringExtra(RESULT_ERROR_MESSAGE_KEY) ?: "Unknown error",
-            )
-            // Result-OK but no type extra means the activity set a result via the wrong
-            // path. Shouldn't happen in practice; treat as a defensive failure.
-            else -> Output.Error(ErrorCode.NO_RESULT, "Checkout activity finished without delivering a result")
-        }
+        // Clear the SDK's overlap gate now that the checkout has terminated, and fire the
+        // terminal analytics event (SUCCESS/CANCEL/FAILURE) for the SDK-creates-session
+        // launcher path. The server-driven launcher path doesn't capture event context and
+        // skips logging — matches the legacy server-driven path's behavior.
+        SezzleSDK.notifyLauncherCheckoutEnded(output)
+
+        return output
     }
 
     companion object {
