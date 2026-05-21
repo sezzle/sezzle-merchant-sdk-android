@@ -23,6 +23,7 @@ import com.sezzle.example.BuildConfig
 import com.sezzle.sdk.SezzleCheckoutListener
 import com.sezzle.sdk.SezzleCheckoutResult
 import com.sezzle.sdk.SezzleSDK
+import com.sezzle.sdk.checkout.SezzleCheckoutContract
 import com.sezzle.sdk.models.*
 import org.json.JSONObject
 import java.io.OutputStreamWriter
@@ -56,6 +57,37 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
         Product("Premium Headphones", "\uD83C\uDFA7", 14999, "\$149.99 — 5 payments (PI5 eligible, over \$50)"),
         Product("Smart Watch", "\u231A", 79900, "\$799 — long-term monthly payments (over \$250)"),
     )
+
+    /**
+     * Lifecycle-safe checkout result handler — works even when the activity is destroyed
+     * and recreated mid-checkout (e.g. "Don't keep activities" developer option).
+     *
+     * Register the launcher as a field (Android requires `registerForActivityResult` to be
+     * called before the activity reaches STARTED, which field-initialization satisfies).
+     */
+    private val sezzleCheckoutLauncher = registerForActivityResult(SezzleCheckoutContract()) { result ->
+        when (result) {
+            is SezzleCheckoutContract.Output.Complete -> startActivity(Intent(this, ResultActivity::class.java).apply {
+                if (result.orderUuid != null) {
+                    putExtra(ResultActivity.EXTRA_TYPE, ResultActivity.TYPE_SUCCESS)
+                    putExtra(ResultActivity.EXTRA_ORDER_UUID, result.orderUuid)
+                } else if (result.callbackUrl != null) {
+                    putExtra(ResultActivity.EXTRA_TYPE, ResultActivity.TYPE_SUCCESS_CALLBACK)
+                    putExtra(ResultActivity.EXTRA_CALLBACK_URL, result.callbackUrl.toString())
+                } else {
+                    putExtra(ResultActivity.EXTRA_TYPE, ResultActivity.TYPE_ERROR)
+                    putExtra(ResultActivity.EXTRA_ERROR_MESSAGE, "No identifier in result")
+                }
+            })
+            SezzleCheckoutContract.Output.Cancel -> startActivity(Intent(this, ResultActivity::class.java).apply {
+                putExtra(ResultActivity.EXTRA_TYPE, ResultActivity.TYPE_CANCELLED)
+            })
+            is SezzleCheckoutContract.Output.Error -> startActivity(Intent(this, ResultActivity::class.java).apply {
+                putExtra(ResultActivity.EXTRA_TYPE, ResultActivity.TYPE_ERROR)
+                putExtra(ResultActivity.EXTRA_ERROR_MESSAGE, result.message)
+            })
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -243,8 +275,14 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
 
     /**
      * Simulates a server-driven integration: pretends to be a backend by POSTing
-     * to /v2/session directly, then hands the URL to the new pass-URL entrypoint.
-     * In production, the network call lives on the merchant's server, not in the app.
+     * to /v2/session directly, then hands the URL to the SDK.
+     *
+     * **WebView mode** uses the new lifecycle-safe `startCheckoutForResult` API — the
+     * result is delivered through `sezzleCheckoutLauncher` above, which is bound to the
+     * Activity Result Registry and survives activity recreation.
+     *
+     * **System Browser mode** still uses the listener-based API (the launcher API
+     * supports WebView only — see SezzleCheckoutContract docs).
      */
     private fun runServerDrivenDemo(
         orderRef: String,
@@ -256,14 +294,23 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
             try {
                 val checkoutUrl = createSandboxSession(completeUrl, cancelUrl, orderRef)
                 runOnUiThread {
-                    SezzleSDK.startCheckout(
-                        checkoutUrl = checkoutUrl,
-                        completeUrl = completeUrl,
-                        cancelUrl = cancelUrl,
-                        activity = this,
-                        listener = this,
-                        mode = mode
-                    )
+                    if (mode == SezzleCheckoutMode.WEB_VIEW) {
+                        SezzleSDK.startCheckoutForResult(
+                            launcher = sezzleCheckoutLauncher,
+                            checkoutUrl = checkoutUrl,
+                            completeUrl = completeUrl,
+                            cancelUrl = cancelUrl,
+                        )
+                    } else {
+                        SezzleSDK.startCheckout(
+                            checkoutUrl = checkoutUrl,
+                            completeUrl = completeUrl,
+                            cancelUrl = cancelUrl,
+                            activity = this,
+                            listener = this,
+                            mode = mode
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 runOnUiThread {
@@ -488,17 +535,22 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
             )
         )
 
-        SezzleSDK.startCheckout(checkout, this, this, mode = mode)
+        // WebView mode uses the lifecycle-safe launcher path (handles activity recreation
+        // mid-checkout — "Don't keep activities", low-memory, etc.). System-browser mode
+        // continues to use the listener-based API.
+        if (mode == SezzleCheckoutMode.WEB_VIEW) {
+            SezzleSDK.startCheckoutForResult(sezzleCheckoutLauncher, checkout)
+        } else {
+            SezzleSDK.startCheckout(checkout, this, this, mode = mode)
+        }
     }
 
     override fun onCheckoutComplete(result: SezzleCheckoutResult) {
         startActivity(Intent(this, ResultActivity::class.java).apply {
             if (result.orderUUID != null) {
-                // SDK-creates-session flow
                 putExtra(ResultActivity.EXTRA_TYPE, ResultActivity.TYPE_SUCCESS)
                 putExtra(ResultActivity.EXTRA_ORDER_UUID, result.orderUUID)
             } else if (result.callbackURL != null) {
-                // Server-driven flow
                 putExtra(ResultActivity.EXTRA_TYPE, ResultActivity.TYPE_SUCCESS_CALLBACK)
                 putExtra(ResultActivity.EXTRA_CALLBACK_URL, result.callbackURL.toString())
             } else {

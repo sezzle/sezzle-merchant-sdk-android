@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import androidx.activity.ComponentActivity
+import androidx.activity.result.ActivityResultLauncher
 import androidx.browser.customtabs.CustomTabsIntent
 import com.sezzle.sdk.SezzleCheckoutListener
 import com.sezzle.sdk.SezzleCheckoutResult
@@ -233,5 +234,82 @@ internal class CheckoutHandler(
             putExtra(SezzleCheckoutWebViewActivity.EXTRA_CANCEL_URL, cancelUrl.toString())
         }
         activity.startActivity(intent)
+    }
+
+    // MARK: SDK-creates-session flow, lifecycle-safe via ActivityResultLauncher.
+    /**
+     * Equivalent of [startCheckout] above, but delivers the result through the merchant's
+     * [ActivityResultLauncher] instead of a static listener. This is the lifecycle-safe path —
+     * the launcher's callback survives host-activity destruction (Don't Keep Activities,
+     * low-memory recreation, etc.).
+     */
+    fun startCheckoutForResult(
+        checkout: SezzleCheckout,
+        launcher: ActivityResultLauncher<SezzleCheckoutContract.Input>,
+        onError: (SezzleError) -> Unit,
+        onLaunched: () -> Unit,
+    ) {
+        val service = sessionService
+        if (service == null) {
+            onError(SezzleError.NotConfigured)
+            return
+        }
+
+        checkoutMode = "webview"
+        eventLogger?.log(event = SezzleEventLogger.Event.POPUP_CREATED, mode = checkoutMode, message = "checkout initiated")
+
+        service.createSession(
+            checkout = checkout,
+            onSuccess = { response ->
+                sessionUUID = response.uuid
+                checkoutUUID = Uri.parse(response.checkoutURL).getQueryParameter("id") ?: ""
+
+                eventLogger?.log(
+                    event = SezzleEventLogger.Event.LOADED,
+                    sessionUUID = response.uuid,
+                    orderUUID = response.orderUUID,
+                    checkoutUUID = checkoutUUID,
+                    mode = checkoutMode
+                )
+
+                mainHandler.post {
+                    val checkoutUri = Uri.parse(response.checkoutURL).buildUpon()
+                        .appendQueryParameter("isWebView", "true")
+                        .build()
+                    launcher.launch(
+                        SezzleCheckoutContract.Input(
+                            checkoutUrl = checkoutUri.toString(),
+                            orderUuid = response.orderUUID,
+                            completeUrl = DEFAULT_COMPLETE_URL,
+                            cancelUrl = DEFAULT_CANCEL_URL,
+                        )
+                    )
+                    onLaunched()
+                }
+            },
+            onError = { error ->
+                mainHandler.post { onError(error) }
+            }
+        )
+    }
+
+    // MARK: Server-driven flow, lifecycle-safe via ActivityResultLauncher.
+    fun startCheckoutForResult(
+        checkoutUrl: String,
+        completeUrl: Uri,
+        cancelUrl: Uri,
+        launcher: ActivityResultLauncher<SezzleCheckoutContract.Input>,
+    ) {
+        val checkoutUri = Uri.parse(checkoutUrl).buildUpon()
+            .appendQueryParameter("isWebView", "true")
+            .build()
+        launcher.launch(
+            SezzleCheckoutContract.Input(
+                checkoutUrl = checkoutUri.toString(),
+                orderUuid = null,
+                completeUrl = completeUrl,
+                cancelUrl = cancelUrl,
+            )
+        )
     }
 }

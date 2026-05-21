@@ -23,7 +23,7 @@
             </intent-filter>
         </activity>
 
-        <!-- WebView checkout activity — used when mode is WEB_VIEW -->
+        <!-- WebView checkout activity — used when mode is WEB_VIEW. -->
         <activity
             android:name=".checkout.SezzleCheckoutWebViewActivity"
             android:exported="false"

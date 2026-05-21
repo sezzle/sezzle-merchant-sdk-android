@@ -7,8 +7,10 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.result.ActivityResultLauncher
 import com.sezzle.sdk.checkout.CheckoutHandler
 import com.sezzle.sdk.checkout.CheckoutState
+import com.sezzle.sdk.checkout.SezzleCheckoutContract
 import com.sezzle.sdk.models.SezzleCheckout
 import com.sezzle.sdk.models.SezzleCheckoutMode
 import com.sezzle.sdk.models.SezzleEnvironment
@@ -167,6 +169,103 @@ object SezzleSDK {
         handler.startCheckout(checkoutUrl, completeUrl, cancelUrl, componentActivity, wrappedListener, mode)
     }
 
+    /**
+     * Lifecycle-safe SDK-creates-session checkout entrypoint.
+     *
+     * Equivalent to [startCheckout] but delivers the result through the merchant's
+     * [ActivityResultLauncher] (via [SezzleCheckoutContract]) instead of a static
+     * listener. Use this if your host activity can be destroyed and recreated mid-checkout
+     * — e.g. "Don't keep activities" developer option, "Background process limit", or
+     * normal low-memory conditions. The launcher's callback is bound to the Activity
+     * Result Registry, which Android re-binds on activity recreation, so the result
+     * still reaches the live host activity.
+     *
+     * **WebView mode only.** This entrypoint always uses [SezzleCheckoutMode.WEB_VIEW];
+     * the system-browser (Custom Tabs) flow has a different recreation profile and
+     * continues to use the listener-based [startCheckout].
+     *
+     * Register the launcher in your activity's field declarations or `onCreate`:
+     *
+     * ```kotlin
+     * private val sezzleLauncher = registerForActivityResult(SezzleCheckoutContract()) { result ->
+     *     when (result) {
+     *         is SezzleCheckoutContract.Output.Complete -> { /* result.orderUuid */ }
+     *         is SezzleCheckoutContract.Output.Cancel -> { /* user cancelled */ }
+     *         is SezzleCheckoutContract.Output.Error -> { /* result.code, result.message */ }
+     *     }
+     * }
+     * ```
+     *
+     * @param launcher The merchant's registered launcher. Must be registered before
+     *                 the host activity reaches STARTED.
+     * @param checkout The customer and order data for this checkout.
+     * @param onError Called synchronously if the SDK isn't configured or another precondition
+     *                fails before the launcher can be invoked. Once the launcher fires,
+     *                errors are delivered through it instead.
+     */
+    fun startCheckoutForResult(
+        launcher: ActivityResultLauncher<SezzleCheckoutContract.Input>,
+        checkout: SezzleCheckout,
+        onError: (SezzleError) -> Unit = {},
+    ) {
+        val key = publicKey
+        val env = environment
+        if (key == null || env == null) {
+            onError(SezzleError.NotConfigured)
+            return
+        }
+        if (isCheckoutInProgress) return
+        isCheckoutInProgress = true
+
+        val httpClient = HttpClient(key, env)
+        val sessionService = SessionService(httpClient)
+        val eventLogger = SezzleEventLogger(key, env)
+        val handler = CheckoutHandler(sessionService, eventLogger)
+        // Clear the gate immediately once we hand off to the launcher — overlap protection
+        // is the listener-based API's concern (where the static-listener race made it
+        // necessary). The launcher path queues launches via ActivityResultRegistry which
+        // is safer, and callers using it are responsible for debouncing their own button.
+        handler.startCheckoutForResult(
+            checkout = checkout,
+            launcher = launcher,
+            onError = { error ->
+                isCheckoutInProgress = false
+                onError(error)
+            },
+            onLaunched = { isCheckoutInProgress = false },
+        )
+    }
+
+    /**
+     * Lifecycle-safe server-driven checkout entrypoint.
+     *
+     * Same rationale as the [SezzleCheckout] overload above. Use this when your backend
+     * has already created the Sezzle session via `POST /v2/session` directly.
+     *
+     * @param launcher The merchant's registered launcher.
+     * @param checkoutUrl The `order.checkout_url` from your session-creation response.
+     * @param completeUrl The same URL you passed as `complete_url.href`.
+     * @param cancelUrl The same URL you passed as `cancel_url.href`.
+     */
+    fun startCheckoutForResult(
+        launcher: ActivityResultLauncher<SezzleCheckoutContract.Input>,
+        checkoutUrl: String,
+        completeUrl: Uri,
+        cancelUrl: Uri,
+    ) {
+        if (isCheckoutInProgress) return
+        isCheckoutInProgress = true
+
+        val handler = CheckoutHandler(sessionService = null, eventLogger = null)
+        handler.startCheckoutForResult(
+            checkoutUrl = checkoutUrl,
+            completeUrl = completeUrl,
+            cancelUrl = cancelUrl,
+            launcher = launcher,
+        )
+        isCheckoutInProgress = false
+    }
+
     /** Whether the SDK has been configured. */
     val isConfigured: Boolean
         get() = publicKey != null && environment != null
@@ -234,3 +333,4 @@ private class ProgressTrackingListener(
         wrapped.onCheckoutError(error)
     }
 }
+
