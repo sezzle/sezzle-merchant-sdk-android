@@ -188,6 +188,35 @@ SezzleSDK.startCheckout(checkout, this, listener, mode = SezzleCheckoutMode.WEB_
 
 The checkout opens in an embedded WebView with a clean header. Trade-off: no cookie sharing with Chrome (user logs in every time).
 
+#### Lifecycle-safe variant (recommended)
+
+For `WEB_VIEW` mode, prefer the `startCheckoutForResult` overload — it delivers the result through Android's [Activity Result API](https://developer.android.com/training/basics/intents/result), which survives host-activity destruction. The listener-based path above stores your callback in a static field; if Android destroys and recreates your activity mid-checkout (developer options like "Don't keep activities", low-memory conditions, etc.), the callback can be lost. The Activity Result path is bound to the registry, which Android re-attaches on recreation:
+
+```kotlin
+class MyActivity : ComponentActivity() {
+    private val sezzleLauncher = registerForActivityResult(SezzleCheckoutContract()) { result ->
+        when (result) {
+            is SezzleCheckoutContract.Output.Complete -> {
+                // result.orderUuid for SDK-creates-session flow
+                // result.callbackUrl for server-driven flow
+            }
+            SezzleCheckoutContract.Output.Cancel -> { /* user dismissed */ }
+            is SezzleCheckoutContract.Output.Error -> {
+                // result.code (one of SezzleCheckoutContract.ErrorCode constants)
+                // result.message (human-readable)
+            }
+        }
+    }
+
+    // Later, at checkout time:
+    SezzleSDK.startCheckoutForResult(sezzleLauncher, checkout)
+    // ...or, for the server-driven flow:
+    SezzleSDK.startCheckoutForResult(sezzleLauncher, checkoutUrl, completeUrl, cancelUrl)
+}
+```
+
+The `SYSTEM_BROWSER` (Custom Tabs) mode has a different recreation profile and continues to use the listener-based `startCheckout`.
+
 ### Parameters
 
 | Parameter | Required | Description |

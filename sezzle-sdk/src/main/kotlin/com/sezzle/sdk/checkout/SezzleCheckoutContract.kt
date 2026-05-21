@@ -1,10 +1,11 @@
 package com.sezzle.sdk.checkout
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.result.contract.ActivityResultContract
-import com.sezzle.sdk.models.SezzleCheckoutMode
+import com.sezzle.sdk.SezzleSDK
 
 /**
  * Lifecycle-safe entrypoint for presenting Sezzle's WebView checkout.
@@ -34,7 +35,7 @@ import com.sezzle.sdk.models.SezzleCheckoutMode
  *         is SezzleCheckoutContract.Output.Complete -> {
  *             // result.orderUuid (SDK-creates-session flow) or result.callbackUrl (server-driven)
  *         }
- *         is SezzleCheckoutContract.Output.Cancel -> { /* user cancelled */ }
+ *         SezzleCheckoutContract.Output.Cancel -> { /* user cancelled */ }
  *         is SezzleCheckoutContract.Output.Error -> {
  *             // result.code identifies the error type; result.message is human-readable
  *         }
@@ -79,8 +80,14 @@ class SezzleCheckoutContract : ActivityResultContract<SezzleCheckoutContract.Inp
          */
         data class Complete(val orderUuid: String?, val callbackUrl: Uri?) : Output()
 
-        /** User cancelled checkout (closed via the X, hardware back at root, etc.). */
-        object Cancel : Output()
+        /**
+         * User cancelled checkout. This covers every non-error dismissal path:
+         * the close X button, the hardware back button at the root of the WebView's
+         * navigation, the checkout page navigating to the configured `cancelUrl`,
+         * swiping the activity out of Recents, or the system destroying the activity
+         * without a delivered result (process death under "Don't keep activities").
+         */
+        data object Cancel : Output()
 
         /**
          * Checkout failed. [code] is one of the [ErrorCode] string constants and identifies
@@ -91,10 +98,33 @@ class SezzleCheckoutContract : ActivityResultContract<SezzleCheckoutContract.Inp
 
     /** String codes for [Output.Error.code]. */
     object ErrorCode {
+        /**
+         * Reserved for future use. The current implementation routes user-dismissal events
+         * (X close, hardware back, system destroy) to [Output.Cancel]. Legacy listener-based
+         * integrations still see `onCheckoutError(BrowserDismissed)` for the same events.
+         */
         const val BROWSER_DISMISSED = "browser_dismissed"
+
+        /** The checkout activity received malformed input or an unexpected callback URL. */
         const val INVALID_RESPONSE = "invalid_response"
+
+        /** A network error occurred while loading the checkout page (DNS, TLS, timeout, etc.). */
         const val NETWORK_ERROR = "network_error"
+
+        /**
+         * The SDK was not configured before launching. Call [SezzleSDK.configure] at app
+         * startup with your `sz_pub_...` public key. Only emitted by the SDK-creates-session
+         * `startCheckoutForResult` overload — the server-driven overload does not require
+         * configuration.
+         */
         const val NOT_CONFIGURED = "not_configured"
+
+        /**
+         * The checkout activity terminated without delivering a result. Possible causes
+         * include the activity being destroyed by the system before it could finish
+         * (very rare under normal conditions; can occur under aggressive memory pressure)
+         * or a hard crash in the WebView. Treat as a transient failure.
+         */
         const val NO_RESULT = "no_result"
     }
 
@@ -104,10 +134,26 @@ class SezzleCheckoutContract : ActivityResultContract<SezzleCheckoutContract.Inp
             putExtra(SezzleCheckoutWebViewActivity.EXTRA_ORDER_UUID, input.orderUuid)
             putExtra(SezzleCheckoutWebViewActivity.EXTRA_COMPLETE_URL, input.completeUrl.toString())
             putExtra(SezzleCheckoutWebViewActivity.EXTRA_CANCEL_URL, input.cancelUrl.toString())
+            // Intentionally do NOT set EXTRA_USE_LEGACY_LISTENER — this entrypoint
+            // routes results via the Intent, not via the static listener.
         }
     }
 
     override fun parseResult(resultCode: Int, intent: Intent?): Output {
+        // Clear the SDK's overlap gate now that the checkout has terminated, regardless
+        // of result type. Without this, the gate stays set forever if the merchant launches
+        // via [SezzleSDK.startCheckoutForResult] (which sets the gate but no longer clears
+        // it immediately — see notes there).
+        SezzleSDK.notifyLauncherCheckoutEnded()
+
+        // RESULT_CANCELED with no intent extras is what the system delivers when the
+        // checkout activity was destroyed without setResult — e.g. swiped from Recents,
+        // or the user pressed Home → back-to-app under a memory-pressure scenario where
+        // the system killed the activity. Treat as cancellation, not error.
+        if (resultCode == Activity.RESULT_CANCELED && intent == null) {
+            return Output.Cancel
+        }
+
         val type = intent?.getStringExtra(RESULT_TYPE_KEY)
         return when (type) {
             RESULT_TYPE_COMPLETE -> Output.Complete(
@@ -119,8 +165,8 @@ class SezzleCheckoutContract : ActivityResultContract<SezzleCheckoutContract.Inp
                 code = intent.getStringExtra(RESULT_ERROR_CODE_KEY) ?: ErrorCode.INVALID_RESPONSE,
                 message = intent.getStringExtra(RESULT_ERROR_MESSAGE_KEY) ?: "Unknown error",
             )
-            // No extras = activity finished without setResult (e.g. process death without
-            // savedInstanceState restoration). Treat as user dismissal — best fallback.
+            // Result-OK but no type extra means the activity set a result via the wrong
+            // path. Shouldn't happen in practice; treat as a defensive failure.
             else -> Output.Error(ErrorCode.NO_RESULT, "Checkout activity finished without delivering a result")
         }
     }

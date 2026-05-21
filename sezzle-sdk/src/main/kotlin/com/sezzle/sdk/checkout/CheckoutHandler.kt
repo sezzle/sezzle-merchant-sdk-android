@@ -232,6 +232,7 @@ internal class CheckoutHandler(
             putExtra(SezzleCheckoutWebViewActivity.EXTRA_ORDER_UUID, orderUUID)
             putExtra(SezzleCheckoutWebViewActivity.EXTRA_COMPLETE_URL, completeUrl.toString())
             putExtra(SezzleCheckoutWebViewActivity.EXTRA_CANCEL_URL, cancelUrl.toString())
+            putExtra(SezzleCheckoutWebViewActivity.EXTRA_USE_LEGACY_LISTENER, true)
         }
         activity.startActivity(intent)
     }

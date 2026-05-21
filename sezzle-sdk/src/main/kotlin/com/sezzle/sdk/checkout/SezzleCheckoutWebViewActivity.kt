@@ -40,6 +40,11 @@ class SezzleCheckoutWebViewActivity : Activity() {
         internal const val EXTRA_ORDER_UUID = "order_uuid"
         internal const val EXTRA_COMPLETE_URL = "complete_url"
         internal const val EXTRA_CANCEL_URL = "cancel_url"
+        // Marks the launch as originating from the listener-based startCheckout overloads.
+        // The activity-result Intent path is always populated; the static [listener] is
+        // only invoked when this extra is true, preventing a stale legacy listener from
+        // firing on a new-API checkout.
+        internal const val EXTRA_USE_LEGACY_LISTENER = "use_legacy_listener"
         internal var listener: SezzleCheckoutListener? = null
     }
 
@@ -101,7 +106,7 @@ class SezzleCheckoutWebViewActivity : Activity() {
             textSize = 18f
             setPadding(dp(8), dp(4), dp(8), dp(4))
             setOnClickListener {
-                deliverResult(TerminalResult.Error(SezzleError.BrowserDismissed))
+                deliverResult(TerminalResult.UserDismissed)
                 finish()
             }
         }
@@ -200,7 +205,7 @@ class SezzleCheckoutWebViewActivity : Activity() {
         if (webView.canGoBack()) {
             webView.goBack()
         } else {
-            deliverResult(TerminalResult.Error(SezzleError.BrowserDismissed))
+            deliverResult(TerminalResult.UserDismissed)
             @Suppress("DEPRECATION")
             super.onBackPressed()
         }
@@ -208,21 +213,29 @@ class SezzleCheckoutWebViewActivity : Activity() {
 
     override fun onDestroy() {
         if (!resultDelivered) {
-            deliverResult(TerminalResult.Error(SezzleError.BrowserDismissed))
+            deliverResult(TerminalResult.UserDismissed)
         }
         webView.destroy()
         super.onDestroy()
     }
 
     /**
-     * Internal model for the three terminal checkout states. Used so that
+     * Internal model for the four terminal checkout states. Used so that
      * [deliverResult] can write to both the [SezzleCheckoutContract] activity-result
      * Intent (lifecycle-safe path) AND the legacy static [listener] (backward-compat
      * path) without the call sites having to repeat themselves.
+     *
+     * [UserDismissed] is distinct from [Cancel] (which is reserved for `cancelUrl`
+     * navigation) and from [Error] (which is reserved for actual failures) — it covers
+     * the X close button, hardware-back-at-root, and activity destroy without a prior
+     * result. On the new API it surfaces as [SezzleCheckoutContract.Output.Cancel];
+     * on the legacy listener it surfaces as `onCheckoutError(BrowserDismissed)` so
+     * existing integrations see the same callback they always have.
      */
     private sealed class TerminalResult {
         data class Complete(val orderUuid: String?, val callbackUrl: Uri?) : TerminalResult()
         object Cancel : TerminalResult()
+        object UserDismissed : TerminalResult()
         data class Error(val error: SezzleError) : TerminalResult()
     }
 
@@ -241,7 +254,7 @@ class SezzleCheckoutWebViewActivity : Activity() {
                 result.orderUuid?.let { resultIntent.putExtra(SezzleCheckoutContract.RESULT_ORDER_UUID_KEY, it) }
                 result.callbackUrl?.let { resultIntent.putExtra(SezzleCheckoutContract.RESULT_CALLBACK_URL_KEY, it.toString()) }
             }
-            TerminalResult.Cancel -> {
+            TerminalResult.Cancel, TerminalResult.UserDismissed -> {
                 resultIntent.putExtra(SezzleCheckoutContract.RESULT_TYPE_KEY, SezzleCheckoutContract.RESULT_TYPE_CANCEL)
             }
             is TerminalResult.Error -> {
@@ -252,18 +265,26 @@ class SezzleCheckoutWebViewActivity : Activity() {
         }
         setResult(RESULT_OK, resultIntent)
 
-        // 2. Legacy listener — best-effort delivery for callers using the listener-based
-        //    SezzleSDK.startCheckout overloads. If the launching activity was destroyed,
-        //    this callback may reference dead state — that's the original bug. Path 1
-        //    above is the recommended migration.
+        // 2. Legacy listener — only invoked when the launch originated from a listener-based
+        //    [SezzleSDK.startCheckout] overload (marked via [EXTRA_USE_LEGACY_LISTENER]). The
+        //    new launcher-based path never sets this extra, so a stale static listener left
+        //    over from a previous legacy checkout cannot accidentally fire on a new-API
+        //    checkout. Also: even when the legacy path is active, the launching activity may
+        //    have been destroyed — that's the original Poshmark-report bug. The Intent path
+        //    above is the recommended migration target.
         val l = listener
         listener = null
-        if (l != null) {
+        val useLegacyListener = intent.getBooleanExtra(EXTRA_USE_LEGACY_LISTENER, false)
+        if (l != null && useLegacyListener) {
             when (result) {
                 is TerminalResult.Complete -> l.onCheckoutComplete(
                     SezzleCheckoutResult(orderUUID = result.orderUuid, callbackURL = result.callbackUrl)
                 )
                 TerminalResult.Cancel -> l.onCheckoutCancel()
+                // UserDismissed maps to BrowserDismissed for the legacy listener — preserves
+                // the contract callers have relied on since 1.0 (X tap / back / dismiss has
+                // always surfaced as onCheckoutError(BrowserDismissed)).
+                TerminalResult.UserDismissed -> l.onCheckoutError(SezzleError.BrowserDismissed)
                 is TerminalResult.Error -> l.onCheckoutError(result.error)
             }
         }

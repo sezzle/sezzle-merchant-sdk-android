@@ -65,6 +65,12 @@ object SezzleSDK {
      * populated. Send that UUID to your backend to capture the payment via
      * `POST /v2/order/{uuid}/capture`.
      *
+     * **Note:** for [SezzleCheckoutMode.WEB_VIEW] mode, prefer [startCheckoutForResult] —
+     * it delivers the result through the Android Activity Result API, which survives
+     * host-activity destruction (e.g. "Don't keep activities" developer option). The
+     * listener-based path here can drop the result if the host activity is destroyed
+     * mid-checkout.
+     *
      * @param checkout The customer and order data for this checkout.
      * @param activity The activity to launch from. Must extend [ComponentActivity].
      * @param listener Receives checkout completion, cancellation, or error callbacks on the main thread.
@@ -122,6 +128,12 @@ object SezzleSDK {
      * populated — read query parameters there to recover any state you encoded in your
      * `complete_url`. `result.orderUUID` is `null` because your backend already has it from
      * the session-creation response.
+     *
+     * **Note:** for [SezzleCheckoutMode.WEB_VIEW] mode, prefer [startCheckoutForResult] —
+     * it delivers the result through the Android Activity Result API, which survives
+     * host-activity destruction (e.g. "Don't keep activities" developer option). The
+     * listener-based path here can drop the result if the host activity is destroyed
+     * mid-checkout.
      *
      * **Manifest note for [SezzleCheckoutMode.SYSTEM_BROWSER]:** if you use a callback scheme
      * other than `sezzle-sdk`, register an intent-filter for that scheme in your own
@@ -221,10 +233,10 @@ object SezzleSDK {
         val sessionService = SessionService(httpClient)
         val eventLogger = SezzleEventLogger(key, env)
         val handler = CheckoutHandler(sessionService, eventLogger)
-        // Clear the gate immediately once we hand off to the launcher — overlap protection
-        // is the listener-based API's concern (where the static-listener race made it
-        // necessary). The launcher path queues launches via ActivityResultRegistry which
-        // is safer, and callers using it are responsible for debouncing their own button.
+        // Gate is held through the entire checkout: cleared on (a) network error before
+        // launch — pre-launch path here — or (b) the terminal result arriving back to the
+        // launcher — see [notifyLauncherCheckoutEnded], called from [SezzleCheckoutContract.parseResult].
+        // Matches the legacy listener path's overlap protection.
         handler.startCheckoutForResult(
             checkout = checkout,
             launcher = launcher,
@@ -232,7 +244,7 @@ object SezzleSDK {
                 isCheckoutInProgress = false
                 onError(error)
             },
-            onLaunched = { isCheckoutInProgress = false },
+            onLaunched = { /* leave gate set; parseResult clears it on result */ },
         )
     }
 
@@ -257,12 +269,29 @@ object SezzleSDK {
         isCheckoutInProgress = true
 
         val handler = CheckoutHandler(sessionService = null, eventLogger = null)
-        handler.startCheckoutForResult(
-            checkoutUrl = checkoutUrl,
-            completeUrl = completeUrl,
-            cancelUrl = cancelUrl,
-            launcher = launcher,
-        )
+        // Gate is held until the terminal result arrives — see [notifyLauncherCheckoutEnded],
+        // called from [SezzleCheckoutContract.parseResult]. If launcher.launch throws (e.g.
+        // unregistered launcher), the catch clears the gate to avoid stranding the SDK.
+        try {
+            handler.startCheckoutForResult(
+                checkoutUrl = checkoutUrl,
+                completeUrl = completeUrl,
+                cancelUrl = cancelUrl,
+                launcher = launcher,
+            )
+        } catch (t: Throwable) {
+            isCheckoutInProgress = false
+            throw t
+        }
+    }
+
+    /**
+     * Called by [SezzleCheckoutContract.parseResult] when a launcher-based checkout
+     * terminates. Clears the overlap gate so the next checkout can proceed.
+     *
+     * Internal — merchants should never invoke this directly.
+     */
+    internal fun notifyLauncherCheckoutEnded() {
         isCheckoutInProgress = false
     }
 
