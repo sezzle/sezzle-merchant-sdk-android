@@ -4,6 +4,36 @@ All notable changes to the Sezzle Merchant SDK for Android will be documented in
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.4] - 2026-05-21
+
+### Added
+- **Lifecycle-safe WebView checkout via `ActivityResultLauncher`.** New `SezzleCheckoutContract` + `SezzleSDK.startCheckoutForResult(...)` overloads deliver the checkout result through the Android Activity Result API instead of the static `SezzleCheckoutListener` reference. The merchant's launcher callback is bound to `ActivityResultRegistry`, which Android re-binds when the host activity is destroyed and recreated — so the result still reaches the live host activity instance. Recommended path for merchants whose host activity may be destroyed mid-checkout under "Don't keep activities" / "Background process limit" / low-memory conditions. (MOBILE → Poshmark integration report)
+
+  ```kotlin
+  private val sezzleLauncher = registerForActivityResult(SezzleCheckoutContract()) { result ->
+      when (result) {
+          is SezzleCheckoutContract.Output.Complete -> { /* result.orderUuid */ }
+          is SezzleCheckoutContract.Output.Cancel -> { /* user cancelled */ }
+          is SezzleCheckoutContract.Output.Error -> { /* result.code, result.message */ }
+      }
+  }
+  // Then:
+  SezzleSDK.startCheckoutForResult(sezzleLauncher, checkout)
+  ```
+
+### Fixed
+- **Listener-based `startCheckout` also delivers via Activity Result Intent for forward-compat.** `SezzleCheckoutWebViewActivity` now calls `setResult(...)` with the same Intent extras that `SezzleCheckoutContract` parses, regardless of which API was used to launch it. Existing listener-based integrations remain unchanged (the static listener path still fires), but the lifecycle-safe Intent path is always populated — merchants can migrate at their own pace.
+
+### Notes
+- **Scope:** the new API is `WEB_VIEW` mode only. The system-browser (Custom Tabs) flow has a different recreation profile — its result arrives via the SDK's bundled `SezzleRedirectActivity` intent-filter, not via `setResult`. Listener-based `startCheckout` continues to be the correct entrypoint for `SYSTEM_BROWSER` mode; a future release will address Custom Tabs lifecycle safety separately if needed.
+- **No public API removals.** `SezzleCheckoutListener`-based `startCheckout` overloads are unchanged and continue to work — the new entrypoints are additions, not replacements.
+- **User-dismissal semantics on the new API.** The close X, hardware back, and system-destroy paths all surface as `Output.Cancel` on the launcher path (more intuitive than `Error(BROWSER_DISMISSED)`). The legacy listener continues to receive `onCheckoutError(BrowserDismissed)` for the same events — no behavior change for existing integrations.
+- **Static listener gated by launch source.** The legacy static listener is only invoked when the launch originated from a listener-based `startCheckout`; the new launcher path never touches it, so a stale listener from a prior legacy checkout cannot accidentally fire on a new-API call.
+- **Overlap protection on the new API.** `startCheckoutForResult` holds the SDK's in-flight gate until the launcher's callback fires (via `parseResult`) — matching the listener path's debounce. Double-tapping the merchant's checkout button during in-flight checkout is a no-op, as it was on the legacy path.
+
+### Compatibility
+- No public API removals. No new permissions. No manifest changes required of merchants. Existing integrations recompile without modification. Merchants opting into the new API only need to add the launcher registration + swap their `startCheckout` call to `startCheckoutForResult`.
+
 ## [1.2.3] - 2026-05-14
 
 ### Security

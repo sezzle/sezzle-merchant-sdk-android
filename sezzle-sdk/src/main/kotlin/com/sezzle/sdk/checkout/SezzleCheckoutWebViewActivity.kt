@@ -2,6 +2,7 @@ package com.sezzle.sdk.checkout
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
@@ -39,6 +40,11 @@ class SezzleCheckoutWebViewActivity : Activity() {
         internal const val EXTRA_ORDER_UUID = "order_uuid"
         internal const val EXTRA_COMPLETE_URL = "complete_url"
         internal const val EXTRA_CANCEL_URL = "cancel_url"
+        // Marks the launch as originating from the listener-based startCheckout overloads.
+        // The activity-result Intent path is always populated; the static [listener] is
+        // only invoked when this extra is true, preventing a stale legacy listener from
+        // firing on a new-API checkout.
+        internal const val EXTRA_USE_LEGACY_LISTENER = "use_legacy_listener"
         internal var listener: SezzleCheckoutListener? = null
     }
 
@@ -71,7 +77,7 @@ class SezzleCheckoutWebViewActivity : Activity() {
             ?: CheckoutHandler.DEFAULT_CANCEL_URL
 
         if (checkoutUrl == null) {
-            deliverResult { it.onCheckoutError(SezzleError.InvalidResponse) }
+            deliverResult(TerminalResult.Error(SezzleError.InvalidResponse))
             finish()
             return
         }
@@ -100,7 +106,7 @@ class SezzleCheckoutWebViewActivity : Activity() {
             textSize = 18f
             setPadding(dp(8), dp(4), dp(8), dp(4))
             setOnClickListener {
-                deliverResult { it.onCheckoutError(SezzleError.BrowserDismissed) }
+                deliverResult(TerminalResult.UserDismissed)
                 finish()
             }
         }
@@ -199,7 +205,7 @@ class SezzleCheckoutWebViewActivity : Activity() {
         if (webView.canGoBack()) {
             webView.goBack()
         } else {
-            deliverResult { it.onCheckoutError(SezzleError.BrowserDismissed) }
+            deliverResult(TerminalResult.UserDismissed)
             @Suppress("DEPRECATION")
             super.onBackPressed()
         }
@@ -207,20 +213,93 @@ class SezzleCheckoutWebViewActivity : Activity() {
 
     override fun onDestroy() {
         if (!resultDelivered) {
-            deliverResult { it.onCheckoutError(SezzleError.BrowserDismissed) }
+            deliverResult(TerminalResult.UserDismissed)
         }
         webView.destroy()
         super.onDestroy()
     }
 
-    private fun deliverResult(action: (SezzleCheckoutListener) -> Unit) {
+    /**
+     * Internal model for the four terminal checkout states. Used so that
+     * [deliverResult] can write to both the [SezzleCheckoutContract] activity-result
+     * Intent (lifecycle-safe path) AND the legacy static [listener] (backward-compat
+     * path) without the call sites having to repeat themselves.
+     *
+     * [UserDismissed] is distinct from [Cancel] (which is reserved for `cancelUrl`
+     * navigation) and from [Error] (which is reserved for actual failures) — it covers
+     * the X close button, hardware-back-at-root, and activity destroy without a prior
+     * result. On the new API it surfaces as [SezzleCheckoutContract.Output.Cancel];
+     * on the legacy listener it surfaces as `onCheckoutError(BrowserDismissed)` so
+     * existing integrations see the same callback they always have.
+     */
+    private sealed class TerminalResult {
+        data class Complete(val orderUuid: String?, val callbackUrl: Uri?) : TerminalResult()
+        object Cancel : TerminalResult()
+        object UserDismissed : TerminalResult()
+        data class Error(val error: SezzleError) : TerminalResult()
+    }
+
+    private fun deliverResult(result: TerminalResult) {
         if (resultDelivered) return
         resultDelivered = true
+
+        // 1. Activity-result Intent — lifecycle-safe path consumed by SezzleCheckoutContract.
+        //    Survives host-activity destruction (e.g. "Don't keep activities" developer option),
+        //    because the merchant's ActivityResultLauncher is registered with their activity's
+        //    ActivityResultRegistry, which Android re-binds on recreation.
+        val resultIntent = Intent()
+        when (result) {
+            is TerminalResult.Complete -> {
+                resultIntent.putExtra(SezzleCheckoutContract.RESULT_TYPE_KEY, SezzleCheckoutContract.RESULT_TYPE_COMPLETE)
+                result.orderUuid?.let { resultIntent.putExtra(SezzleCheckoutContract.RESULT_ORDER_UUID_KEY, it) }
+                result.callbackUrl?.let { resultIntent.putExtra(SezzleCheckoutContract.RESULT_CALLBACK_URL_KEY, it.toString()) }
+            }
+            TerminalResult.Cancel, TerminalResult.UserDismissed -> {
+                resultIntent.putExtra(SezzleCheckoutContract.RESULT_TYPE_KEY, SezzleCheckoutContract.RESULT_TYPE_CANCEL)
+            }
+            is TerminalResult.Error -> {
+                resultIntent.putExtra(SezzleCheckoutContract.RESULT_TYPE_KEY, SezzleCheckoutContract.RESULT_TYPE_ERROR)
+                resultIntent.putExtra(SezzleCheckoutContract.RESULT_ERROR_CODE_KEY, errorCodeFor(result.error))
+                resultIntent.putExtra(SezzleCheckoutContract.RESULT_ERROR_MESSAGE_KEY, result.error.message)
+            }
+        }
+        setResult(RESULT_OK, resultIntent)
+
+        // 2. Legacy listener — only invoked when the launch originated from a listener-based
+        //    [SezzleSDK.startCheckout] overload (marked via [EXTRA_USE_LEGACY_LISTENER]). The
+        //    new launcher-based path never sets this extra, so a stale static listener left
+        //    over from a previous legacy checkout cannot accidentally fire on a new-API
+        //    checkout. Also: even when the legacy path is active, the launching activity may
+        //    have been destroyed — that's the original Poshmark-report bug. The Intent path
+        //    above is the recommended migration target.
         val l = listener
         listener = null
-        if (l != null) {
-            action(l)
+        val useLegacyListener = intent.getBooleanExtra(EXTRA_USE_LEGACY_LISTENER, false)
+        if (l != null && useLegacyListener) {
+            when (result) {
+                is TerminalResult.Complete -> l.onCheckoutComplete(
+                    SezzleCheckoutResult(orderUUID = result.orderUuid, callbackURL = result.callbackUrl)
+                )
+                TerminalResult.Cancel -> l.onCheckoutCancel()
+                // UserDismissed maps to BrowserDismissed for the legacy listener — preserves
+                // the contract callers have relied on since 1.0 (X tap / back / dismiss has
+                // always surfaced as onCheckoutError(BrowserDismissed)).
+                TerminalResult.UserDismissed -> l.onCheckoutError(SezzleError.BrowserDismissed)
+                is TerminalResult.Error -> l.onCheckoutError(result.error)
+            }
         }
+    }
+
+    private fun errorCodeFor(error: SezzleError): String = when (error) {
+        is SezzleError.BrowserDismissed -> SezzleCheckoutContract.ErrorCode.BROWSER_DISMISSED
+        is SezzleError.InvalidResponse -> SezzleCheckoutContract.ErrorCode.INVALID_RESPONSE
+        is SezzleError.NetworkError -> SezzleCheckoutContract.ErrorCode.NETWORK_ERROR
+        is SezzleError.NotConfigured -> SezzleCheckoutContract.ErrorCode.NOT_CONFIGURED
+        // ApiError shouldn't reach this activity (only emitted by SessionService during
+        // session creation, which is upstream of WebView presentation). Map to
+        // INVALID_RESPONSE for safety so the merchant still gets a meaningful code if
+        // the surface ever changes.
+        is SezzleError.ApiError -> SezzleCheckoutContract.ErrorCode.INVALID_RESPONSE
     }
 
     private fun isCallback(uri: Uri): Boolean {
@@ -280,11 +359,13 @@ class SezzleCheckoutWebViewActivity : Activity() {
             }
             if (request?.isForMainFrame == true) {
                 loadingSpinner.visibility = View.GONE
-                deliverResult {
-                    it.onCheckoutError(SezzleError.NetworkError(
-                        RuntimeException("WebView error: ${error?.description}")
-                    ))
-                }
+                deliverResult(
+                    TerminalResult.Error(
+                        SezzleError.NetworkError(
+                            RuntimeException("WebView error: ${error?.description}")
+                        )
+                    )
+                )
                 finish()
             }
         }
@@ -293,17 +374,18 @@ class SezzleCheckoutWebViewActivity : Activity() {
     private fun handleCallback(uri: Uri) {
         when {
             CheckoutHandler.matches(uri, completeUrl) -> {
-                val result = SezzleCheckoutResult(
-                    orderUUID = orderUUID,
-                    callbackURL = if (orderUUID == null) uri else null
+                deliverResult(
+                    TerminalResult.Complete(
+                        orderUuid = orderUUID,
+                        callbackUrl = if (orderUUID == null) uri else null,
+                    )
                 )
-                deliverResult { it.onCheckoutComplete(result) }
             }
             CheckoutHandler.matches(uri, cancelUrl) -> {
-                deliverResult { it.onCheckoutCancel() }
+                deliverResult(TerminalResult.Cancel)
             }
             else -> {
-                deliverResult { it.onCheckoutError(SezzleError.InvalidResponse) }
+                deliverResult(TerminalResult.Error(SezzleError.InvalidResponse))
             }
         }
     }

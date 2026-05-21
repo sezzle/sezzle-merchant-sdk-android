@@ -7,8 +7,10 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.result.ActivityResultLauncher
 import com.sezzle.sdk.checkout.CheckoutHandler
 import com.sezzle.sdk.checkout.CheckoutState
+import com.sezzle.sdk.checkout.SezzleCheckoutContract
 import com.sezzle.sdk.models.SezzleCheckout
 import com.sezzle.sdk.models.SezzleCheckoutMode
 import com.sezzle.sdk.models.SezzleEnvironment
@@ -37,6 +39,22 @@ object SezzleSDK {
     private var isCheckoutInProgress = false
 
     /**
+     * Per-in-flight-checkout context for emitting terminal analytics events
+     * (SUCCESS / CANCEL / FAILURE) on the launcher path. Captured during
+     * SDK-creates-session [startCheckoutForResult] after the session API call
+     * succeeds; consumed by [notifyLauncherCheckoutEnded]. Null for the
+     * server-driven launcher path (no public key on-device → no event logging).
+     */
+    private var pendingLauncherEventContext: LauncherEventContext? = null
+
+    private data class LauncherEventContext(
+        val eventLogger: SezzleEventLogger,
+        val sessionUUID: String,
+        val checkoutUUID: String,
+        val mode: String,
+    )
+
+    /**
      * Configure the SDK with your Sezzle public key.
      *
      * Required only for the SDK-creates-session flow. The server-driven entrypoint
@@ -62,6 +80,12 @@ object SezzleSDK {
      * On success, [SezzleCheckoutListener.onCheckoutComplete] is called with `result.orderUUID`
      * populated. Send that UUID to your backend to capture the payment via
      * `POST /v2/order/{uuid}/capture`.
+     *
+     * **Note:** for [SezzleCheckoutMode.WEB_VIEW] mode, prefer [startCheckoutForResult] —
+     * it delivers the result through the Android Activity Result API, which survives
+     * host-activity destruction (e.g. "Don't keep activities" developer option). The
+     * listener-based path here can drop the result if the host activity is destroyed
+     * mid-checkout.
      *
      * @param checkout The customer and order data for this checkout.
      * @param activity The activity to launch from. Must extend [ComponentActivity].
@@ -121,6 +145,12 @@ object SezzleSDK {
      * `complete_url`. `result.orderUUID` is `null` because your backend already has it from
      * the session-creation response.
      *
+     * **Note:** for [SezzleCheckoutMode.WEB_VIEW] mode, prefer [startCheckoutForResult] —
+     * it delivers the result through the Android Activity Result API, which survives
+     * host-activity destruction (e.g. "Don't keep activities" developer option). The
+     * listener-based path here can drop the result if the host activity is destroyed
+     * mid-checkout.
+     *
      * **Manifest note for [SezzleCheckoutMode.SYSTEM_BROWSER]:** if you use a callback scheme
      * other than `sezzle-sdk`, register an intent-filter for that scheme in your own
      * `AndroidManifest.xml` pointing at [com.sezzle.sdk.checkout.SezzleRedirectActivity]
@@ -165,6 +195,177 @@ object SezzleSDK {
         val handler = CheckoutHandler(sessionService = null, eventLogger = null)
         val wrappedListener = ProgressTrackingListener(listener) { isCheckoutInProgress = false }
         handler.startCheckout(checkoutUrl, completeUrl, cancelUrl, componentActivity, wrappedListener, mode)
+    }
+
+    /**
+     * Lifecycle-safe SDK-creates-session checkout entrypoint.
+     *
+     * Equivalent to [startCheckout] but delivers the result through the merchant's
+     * [ActivityResultLauncher] (via [SezzleCheckoutContract]) instead of a static
+     * listener. Use this if your host activity can be destroyed and recreated mid-checkout
+     * — e.g. "Don't keep activities" developer option, "Background process limit", or
+     * normal low-memory conditions. The launcher's callback is bound to the Activity
+     * Result Registry, which Android re-binds on activity recreation, so the result
+     * still reaches the live host activity.
+     *
+     * **WebView mode only.** This entrypoint always uses [SezzleCheckoutMode.WEB_VIEW];
+     * the system-browser (Custom Tabs) flow has a different recreation profile and
+     * continues to use the listener-based [startCheckout].
+     *
+     * Register the launcher in your activity's field declarations or `onCreate`:
+     *
+     * ```kotlin
+     * private val sezzleLauncher = registerForActivityResult(SezzleCheckoutContract()) { result ->
+     *     when (result) {
+     *         is SezzleCheckoutContract.Output.Complete -> { /* result.orderUuid */ }
+     *         is SezzleCheckoutContract.Output.Cancel -> { /* user cancelled */ }
+     *         is SezzleCheckoutContract.Output.Error -> { /* result.code, result.message */ }
+     *     }
+     * }
+     * ```
+     *
+     * @param launcher The merchant's registered launcher. Must be registered before
+     *                 the host activity reaches STARTED.
+     * @param checkout The customer and order data for this checkout.
+     * @param onError Called when a pre-launch failure prevents the launcher from firing —
+     *                SDK not configured ([SezzleError.NotConfigured]), session creation
+     *                fails ([SezzleError.NetworkError], [SezzleError.ApiError]), or the
+     *                merchant's launcher was already unregistered by the time we tried to
+     *                launch ([SezzleError.NetworkError] wrapping `IllegalStateException`).
+     *                **Required** — a default no-op would silently eat these errors and
+     *                leave the merchant's checkout button looking unresponsive. Once the
+     *                launcher fires, all subsequent errors are delivered through it.
+     */
+    fun startCheckoutForResult(
+        launcher: ActivityResultLauncher<SezzleCheckoutContract.Input>,
+        checkout: SezzleCheckout,
+        onError: (SezzleError) -> Unit,
+    ) {
+        val key = publicKey
+        val env = environment
+        if (key == null || env == null) {
+            onError(SezzleError.NotConfigured)
+            return
+        }
+        if (isCheckoutInProgress) return
+        isCheckoutInProgress = true
+
+        val httpClient = HttpClient(key, env)
+        val sessionService = SessionService(httpClient)
+        val eventLogger = SezzleEventLogger(key, env)
+        val handler = CheckoutHandler(sessionService, eventLogger)
+        // Gate is held through the entire checkout: cleared on (a) network error before
+        // launch — pre-launch path here — or (b) the terminal result arriving back to the
+        // launcher — see [notifyLauncherCheckoutEnded], called from [SezzleCheckoutContract.parseResult].
+        // Matches the legacy listener path's overlap protection.
+        handler.startCheckoutForResult(
+            checkout = checkout,
+            launcher = launcher,
+            onError = { error ->
+                isCheckoutInProgress = false
+                onError(error)
+            },
+            onLaunched = { /* leave gate set; parseResult clears it on result */ },
+            onSessionReady = { sessionUUID, checkoutUUID ->
+                // Capture context for the terminal analytics events (SUCCESS/CANCEL/FAILURE).
+                // The launcher path has no listener to wrap, so we fire from
+                // notifyLauncherCheckoutEnded() instead. Server-driven path doesn't go
+                // through createSession and never sets this — server-driven flow has no
+                // event logging by design (no public key on-device).
+                pendingLauncherEventContext = LauncherEventContext(
+                    eventLogger = eventLogger,
+                    sessionUUID = sessionUUID,
+                    checkoutUUID = checkoutUUID,
+                    mode = "webview",
+                )
+            },
+        )
+    }
+
+    /**
+     * Lifecycle-safe server-driven checkout entrypoint.
+     *
+     * Same rationale as the [SezzleCheckout] overload above. Use this when your backend
+     * has already created the Sezzle session via `POST /v2/session` directly.
+     *
+     * @param launcher The merchant's registered launcher.
+     * @param checkoutUrl The `order.checkout_url` from your session-creation response.
+     * @param completeUrl The same URL you passed as `complete_url.href`.
+     * @param cancelUrl The same URL you passed as `cancel_url.href`.
+     * @param onError Called when `launcher.launch(...)` throws — typically because the
+     *                merchant's host activity (and its `ActivityResultRegistry`) was
+     *                destroyed before this call ran. Mirrors the [SezzleCheckout]
+     *                overload's error channel so a single `onError` handler works for
+     *                both entrypoints.
+     */
+    fun startCheckoutForResult(
+        launcher: ActivityResultLauncher<SezzleCheckoutContract.Input>,
+        checkoutUrl: String,
+        completeUrl: Uri,
+        cancelUrl: Uri,
+        onError: (SezzleError) -> Unit,
+    ) {
+        if (isCheckoutInProgress) return
+        isCheckoutInProgress = true
+
+        val handler = CheckoutHandler(sessionService = null, eventLogger = null)
+        // Gate is held until the terminal result arrives — see [notifyLauncherCheckoutEnded],
+        // called from [SezzleCheckoutContract.parseResult]. If launcher.launch throws (e.g.
+        // unregistered launcher), route via onError + clear the gate so the merchant gets a
+        // signal and the SDK doesn't strand. Same channel as the SDK-creates-session
+        // overload — consistent API surface across both entrypoints.
+        try {
+            handler.startCheckoutForResult(
+                checkoutUrl = checkoutUrl,
+                completeUrl = completeUrl,
+                cancelUrl = cancelUrl,
+                launcher = launcher,
+            )
+        } catch (t: Throwable) {
+            isCheckoutInProgress = false
+            onError(SezzleError.NetworkError(t))
+        }
+    }
+
+    /**
+     * Called by [SezzleCheckoutContract.parseResult] when a launcher-based checkout
+     * terminates. Clears the overlap gate and emits the terminal analytics event
+     * (SUCCESS / CANCEL / FAILURE) if event-logging context was captured at session
+     * creation — i.e. only for the SDK-creates-session launcher overload. The
+     * server-driven launcher overload has no event-logging context and emits no events,
+     * matching the legacy server-driven path's behavior.
+     *
+     * Internal — merchants should never invoke this directly.
+     */
+    internal fun notifyLauncherCheckoutEnded(output: SezzleCheckoutContract.Output) {
+        isCheckoutInProgress = false
+
+        val ctx = pendingLauncherEventContext
+        pendingLauncherEventContext = null
+        if (ctx == null) return
+
+        when (output) {
+            is SezzleCheckoutContract.Output.Complete -> ctx.eventLogger.log(
+                event = SezzleEventLogger.Event.SUCCESS,
+                sessionUUID = ctx.sessionUUID,
+                orderUUID = output.orderUuid ?: "",
+                checkoutUUID = ctx.checkoutUUID,
+                mode = ctx.mode,
+            )
+            SezzleCheckoutContract.Output.Cancel -> ctx.eventLogger.log(
+                event = SezzleEventLogger.Event.CANCEL,
+                sessionUUID = ctx.sessionUUID,
+                checkoutUUID = ctx.checkoutUUID,
+                mode = ctx.mode,
+            )
+            is SezzleCheckoutContract.Output.Error -> ctx.eventLogger.log(
+                event = SezzleEventLogger.Event.FAILURE,
+                sessionUUID = ctx.sessionUUID,
+                checkoutUUID = ctx.checkoutUUID,
+                mode = ctx.mode,
+                message = output.message,
+            )
+        }
     }
 
     /** Whether the SDK has been configured. */
@@ -234,3 +435,4 @@ private class ProgressTrackingListener(
         wrapped.onCheckoutError(error)
     }
 }
+
