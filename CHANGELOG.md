@@ -24,7 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   Affects `WEB_VIEW` mode only. `SYSTEM_BROWSER` mode (Chrome Custom Tabs) shares cookies with Chrome and is outside the SDK's reach.
 
 ### Compatibility
-- **No automatic clearing.** Merchants who don't call `clearWebViewData()` will still see the cross-user cookie leak in WEB_VIEW mode — this is by design, matching the pattern of competing SDKs (Affirm's `clearCookies(Context)` is the same shape). The SDK does not assume when a logout has happened; you do.
+- **No automatic clearing.** Merchants who don't call `clearWebViewData()` will still see the cross-user cookie leak in WEB_VIEW mode. This is intentional — the SDK does not assume when a logout has happened; you do. Returning Sezzle users keep their persistent login between checkouts under the same merchant-app user, which is preferable when only one person uses the device.
 - No new permissions. No new dependencies. Existing integrations recompile without modification — only merchants implementing multi-user flows need to wire up the new call.
 
 ## [1.2.4] - 2026-05-21
