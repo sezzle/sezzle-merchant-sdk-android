@@ -61,23 +61,34 @@ internal object SezzleSessionScrubber {
 
     fun clear() {
         val cookieManager = CookieManager.getInstance()
-        cookieManager.setAcceptCookie(true)
-        SEZZLE_COOKIE_DOMAINS.forEach { (url, domains) ->
-            val cookies = cookieManager.getCookie(url) ?: return@forEach
-            val names = cookies.split(";")
-                .map { it.substringBefore("=").trim() }
-                .filter { it.isNotEmpty() }
-            names.forEach { name ->
-                domains.forEach { domain ->
-                    val cookieStr = buildString {
-                        append(name).append("=; Path=/; Max-Age=0")
-                        if (domain.isNotEmpty()) append("; Domain=").append(domain)
+
+        // CookieManager is an app-wide singleton. If the merchant has set `acceptCookie=false`
+        // process-wide (GDPR / privacy / DNT toggle), `setCookie(...)` is a no-op and our scrub
+        // can't delete anything. Temporarily enable acceptance so the scrub can run, then
+        // restore the original value in `finally` — never leave it flipped, or we'd silently
+        // break the merchant's privacy posture for the rest of the process lifetime.
+        val originalAcceptCookie = cookieManager.acceptCookie()
+        if (!originalAcceptCookie) cookieManager.setAcceptCookie(true)
+        try {
+            SEZZLE_COOKIE_DOMAINS.forEach { (url, domains) ->
+                val cookies = cookieManager.getCookie(url) ?: return@forEach
+                val names = cookies.split(";")
+                    .map { it.substringBefore("=").trim() }
+                    .filter { it.isNotEmpty() }
+                names.forEach { name ->
+                    domains.forEach { domain ->
+                        val cookieStr = buildString {
+                            append(name).append("=; Path=/; Max-Age=0")
+                            if (domain.isNotEmpty()) append("; Domain=").append(domain)
+                        }
+                        cookieManager.setCookie(url, cookieStr)
                     }
-                    cookieManager.setCookie(url, cookieStr)
                 }
             }
+            cookieManager.flush()
+        } finally {
+            if (!originalAcceptCookie) cookieManager.setAcceptCookie(false)
         }
-        cookieManager.flush()
 
         // Also clear localStorage / sessionStorage / IndexedDB for the same origins —
         // Sezzle's checkout page caches auth state there in addition to cookies on some flows.

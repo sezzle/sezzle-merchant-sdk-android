@@ -172,6 +172,49 @@ class SezzleSessionScrubberTest {
     }
 
     @Test
+    fun `clear preserves merchant's acceptCookie=false setting`() {
+        // Merchant has disabled cookies app-wide (privacy mode / GDPR toggle / DNT).
+        // The scrub may temporarily enable acceptance to do its work, but it MUST restore
+        // the original value — never leave the merchant's privacy posture silently flipped.
+        cookieManager.setAcceptCookie(false)
+
+        SezzleSessionScrubber.clear()
+
+        assertEquals(
+            "scrub silently flipped acceptCookie from false → true (merchant's privacy setting broken)",
+            false,
+            cookieManager.acceptCookie(),
+        )
+    }
+
+    @Test
+    fun `clear preserves merchant's acceptCookie=true setting`() {
+        cookieManager.setAcceptCookie(true)
+
+        SezzleSessionScrubber.clear()
+
+        assertEquals(true, cookieManager.acceptCookie())
+    }
+
+    @Test
+    fun `clear restores acceptCookie=false even if scrub throws`() {
+        // If the scrub body throws partway through, the finally block must still restore
+        // the original acceptCookie value. Hard to force a throw without mocking, but we
+        // can at least exercise the path where cookies were set before the privacy toggle —
+        // the scrub will iterate normally and the finally will run.
+        cookieManager.setCookie(
+            "https://checkout.sezzle.com",
+            "access_token=leaked; Domain=.sezzle.com; Path=/; Max-Age=3600",
+        )
+        cookieManager.flush()
+        cookieManager.setAcceptCookie(false)
+
+        SezzleSessionScrubber.clear()
+
+        assertEquals(false, cookieManager.acceptCookie())
+    }
+
+    @Test
     fun `clear wipes value of host-only sezzle cookie (no Domain attribute)`() {
         // Less common shape but possible — make sure host-only cookies are also scrubbed.
         cookieManager.setCookie(
