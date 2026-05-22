@@ -270,7 +270,7 @@ class SezzleCheckoutWebViewActivity : Activity() {
         //    new launcher-based path never sets this extra, so a stale static listener left
         //    over from a previous legacy checkout cannot accidentally fire on a new-API
         //    checkout. Also: even when the legacy path is active, the launching activity may
-        //    have been destroyed — that's the original Poshmark-report bug. The Intent path
+        //    have been destroyed — that's the original lifecycle bug. The Intent path
         //    above is the recommended migration target.
         val l = listener
         listener = null
@@ -349,7 +349,7 @@ class SezzleCheckoutWebViewActivity : Activity() {
         }
 
         override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
-            // The WebView fails to load custom-scheme redirects (sezzle-sdk://, poshmark://...);
+            // The WebView fails to load custom-scheme redirects (sezzle-sdk://, merchant-custom-scheme://...);
             // treat those errors as the callback firing.
             val url = request?.url
             if (url != null && isCallback(url)) {

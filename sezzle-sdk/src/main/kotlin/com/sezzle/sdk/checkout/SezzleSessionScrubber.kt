@@ -11,7 +11,7 @@ import android.webkit.WebStorage
  * same device, even after the merchant logs the user out of their own app and a different
  * user signs in. Without an explicit clear, User A's Sezzle session can satisfy the checkout
  * page's "returning customer" cookie check on User B's first attempt, surfacing A's
- * credit-limit / decline state to B. (Reported by Poshmark.)
+ * credit-limit / decline state to B.
  *
  * The scrub is **scoped to Sezzle's own domains** — the merchant app's other cookies are
  * untouched. Calling `removeAllCookies()` would wipe the merchant's state too and is unsafe

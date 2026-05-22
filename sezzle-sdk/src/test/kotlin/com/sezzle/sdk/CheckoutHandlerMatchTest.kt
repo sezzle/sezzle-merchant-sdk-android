@@ -19,15 +19,15 @@ class CheckoutHandlerMatchTest {
 
     @Test
     fun `extra query params still match`() {
-        val target = Uri.parse("poshmark-sezzle://checkout/done")
-        val uri = Uri.parse("poshmark-sezzle://checkout/done?orderRef=12345&extra=true")
+        val target = Uri.parse("merchant-sezzle://checkout/done")
+        val uri = Uri.parse("merchant-sezzle://checkout/done?orderRef=12345&extra=true")
         assertTrue(CheckoutHandler.matches(uri, target))
     }
 
     @Test
     fun `case-insensitive scheme and host`() {
-        val target = Uri.parse("Poshmark-Sezzle://Checkout/done")
-        val uri = Uri.parse("poshmark-sezzle://checkout/done")
+        val target = Uri.parse("Merchant-Sezzle://Checkout/done")
+        val uri = Uri.parse("merchant-sezzle://checkout/done")
         assertTrue(CheckoutHandler.matches(uri, target))
     }
 

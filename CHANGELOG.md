@@ -17,7 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   }
   ```
 
-  Why this is needed: Android's `CookieManager` is an app-wide persistent singleton. Cookies set during one user's Sezzle checkout (auth tokens, session identifiers) persist across users on the same device — without this call, the next user's first BNPL attempt can resume the previous user's Sezzle session and surface their state (e.g. credit-limit decline) to the wrong customer. Reported by Poshmark — User A's credit-limit decline showing for User B after a logout/login.
+  Why this is needed: Android's `CookieManager` is an app-wide persistent singleton. Cookies set during one user's Sezzle checkout (auth tokens, session identifiers) persist across users on the same device — without this call, the next user's first BNPL attempt can resume the previous user's Sezzle session and surface their state (e.g. credit-limit decline) to the wrong customer.
 
   The clear is **scoped to Sezzle's own domains** (`checkout.sezzle.com`, `sandbox.checkout.sezzle.com`, `api.sezzle.com`, `sandbox.api.sezzle.com`, `sezzle.com`, `www.sezzle.com`, `sandbox.sezzle.com`). Your other cookies and Web storage are not touched. Safe to call repeatedly; safe to call when no Sezzle checkout has ever run in this process. Preserves your app-wide `CookieManager.acceptCookie()` setting across the call (privacy/GDPR/DNT modes are not silently flipped).
 
@@ -30,7 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ## [1.2.4] - 2026-05-21
 
 ### Added
-- **Lifecycle-safe WebView checkout via `ActivityResultLauncher`.** New `SezzleCheckoutContract` + `SezzleSDK.startCheckoutForResult(...)` overloads deliver the checkout result through the Android Activity Result API instead of the static `SezzleCheckoutListener` reference. The merchant's launcher callback is bound to `ActivityResultRegistry`, which Android re-binds when the host activity is destroyed and recreated — so the result still reaches the live host activity instance. Recommended path for merchants whose host activity may be destroyed mid-checkout under "Don't keep activities" / "Background process limit" / low-memory conditions. (MOBILE → Poshmark integration report)
+- **Lifecycle-safe WebView checkout via `ActivityResultLauncher`.** New `SezzleCheckoutContract` + `SezzleSDK.startCheckoutForResult(...)` overloads deliver the checkout result through the Android Activity Result API instead of the static `SezzleCheckoutListener` reference. The merchant's launcher callback is bound to `ActivityResultRegistry`, which Android re-binds when the host activity is destroyed and recreated — so the result still reaches the live host activity instance. Recommended path for merchants whose host activity may be destroyed mid-checkout under "Don't keep activities" / "Background process limit" / low-memory conditions.
 
   ```kotlin
   private val sezzleLauncher = registerForActivityResult(SezzleCheckoutContract()) { result ->

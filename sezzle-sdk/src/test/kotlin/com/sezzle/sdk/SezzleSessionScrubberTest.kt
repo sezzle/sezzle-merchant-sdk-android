@@ -144,8 +144,8 @@ class SezzleSessionScrubberTest {
     fun `clear does NOT touch merchant non-sezzle cookies`() {
         // The merchant's own backend cookie — must NOT be wiped by our scrub.
         cookieManager.setCookie(
-            "https://api.poshmark.com",
-            "poshmark_session=merchant-secret; Domain=.poshmark.com; Path=/; Max-Age=3600",
+            "https://api.merchant.example",
+            "merchant_session=merchant-secret; Domain=.merchant.example; Path=/; Max-Age=3600",
         )
         // And a non-Sezzle third-party domain.
         cookieManager.setCookie(
@@ -156,10 +156,10 @@ class SezzleSessionScrubberTest {
 
         SezzleSessionScrubber.clear()
 
-        val poshmark = cookieManager.getCookie("https://api.poshmark.com")
+        val merchantCookie = cookieManager.getCookie("https://api.merchant.example")
         val example = cookieManager.getCookie("https://example.com")
-        assertNotNull("merchant cookie was wiped", poshmark)
-        assertTrue("merchant cookie missing: $poshmark", poshmark!!.contains("poshmark_session=merchant-secret"))
+        assertNotNull("merchant cookie was wiped", merchantCookie)
+        assertTrue("merchant cookie missing: $merchantCookie", merchantCookie!!.contains("merchant_session=merchant-secret"))
         assertNotNull("third-party cookie was wiped", example)
         assertTrue("third-party cookie missing: $example", example!!.contains("analytics_id=keep-me"))
     }

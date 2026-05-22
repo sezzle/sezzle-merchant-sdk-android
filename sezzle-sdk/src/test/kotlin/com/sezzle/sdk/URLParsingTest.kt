@@ -71,9 +71,9 @@ class URLParsingTest {
 
     @Test
     fun `server-driven flow returns callbackURL not orderUUID`() {
-        val merchantComplete = Uri.parse("poshmark-sezzle://checkout/done")
-        val merchantCancel = Uri.parse("poshmark-sezzle://checkout/cancelled")
-        val landed = Uri.parse("poshmark-sezzle://checkout/done?orderRef=12345")
+        val merchantComplete = Uri.parse("merchant-sezzle://checkout/done")
+        val merchantCancel = Uri.parse("merchant-sezzle://checkout/cancelled")
+        val landed = Uri.parse("merchant-sezzle://checkout/done?orderRef=12345")
 
         CheckoutHandler.handleCallbackUri(landed, merchantComplete, merchantCancel, orderUUID = null, listener)
 

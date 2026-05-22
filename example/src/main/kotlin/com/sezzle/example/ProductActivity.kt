@@ -284,7 +284,7 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
      * in WebView mode — the SDK's WebView intercepts before the URL loads.
      */
     private fun startServerDrivenWebViewDemo() {
-        val orderRef = "poshmark-demo-${(1000..9999).random()}"
+        val orderRef = "merchant-demo-${(1000..9999).random()}"
         val completeUrl = Uri.parse("https://example.com/sezzle-checkout/done?orderRef=$orderRef")
         val cancelUrl = Uri.parse("https://example.com/sezzle-checkout/cancelled")
         runServerDrivenDemo(orderRef, completeUrl, cancelUrl, SezzleCheckoutMode.WEB_VIEW)
@@ -297,7 +297,7 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
      * Chrome Custom Tabs wouldn't route the redirect back into the app.
      */
     private fun startServerDrivenSystemBrowserDemo() {
-        val orderRef = "poshmark-demo-${(1000..9999).random()}"
+        val orderRef = "merchant-demo-${(1000..9999).random()}"
         val completeUrl = Uri.parse("sezzle-example://checkout/done?orderRef=$orderRef")
         val cancelUrl = Uri.parse("sezzle-example://checkout/cancelled")
         runServerDrivenDemo(orderRef, completeUrl, cancelUrl, SezzleCheckoutMode.SYSTEM_BROWSER)
