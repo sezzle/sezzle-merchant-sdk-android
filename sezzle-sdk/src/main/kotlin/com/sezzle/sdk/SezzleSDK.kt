@@ -11,6 +11,7 @@ import androidx.activity.result.ActivityResultLauncher
 import com.sezzle.sdk.checkout.CheckoutHandler
 import com.sezzle.sdk.checkout.CheckoutState
 import com.sezzle.sdk.checkout.SezzleCheckoutContract
+import com.sezzle.sdk.checkout.SezzleSessionScrubber
 import com.sezzle.sdk.models.SezzleCheckout
 import com.sezzle.sdk.models.SezzleCheckoutMode
 import com.sezzle.sdk.models.SezzleEnvironment
@@ -371,6 +372,30 @@ object SezzleSDK {
     /** Whether the SDK has been configured. */
     val isConfigured: Boolean
         get() = publicKey != null && environment != null
+
+    /**
+     * Clears Sezzle's cookies and Web storage from the app-wide WebView state.
+     *
+     * **Call this when your app's user logs out** (or switches accounts) so the next
+     * Sezzle checkout starts with a fresh session.
+     *
+     * Why this exists: Android's [android.webkit.CookieManager] is an app-wide persistent
+     * singleton. Cookies set by one user's Sezzle checkout (auth tokens, session identifiers)
+     * persist across users on the same device — without this call, the next user's first
+     * BNPL attempt can resume the previous user's Sezzle session and surface their state
+     * (e.g. credit-limit decline) to the wrong customer.
+     *
+     * The clear is **scoped to Sezzle's own domains** — your other cookies and Web storage
+     * are not touched. Safe to call repeatedly; safe to call when no Sezzle checkout has
+     * ever run in this process.
+     *
+     * Affects `WEB_VIEW` mode only. `SYSTEM_BROWSER` mode (Chrome Custom Tabs) shares
+     * cookies with Chrome and is outside the SDK's reach — if you need to clear those, the
+     * user should clear them in Chrome.
+     */
+    fun clearWebViewData() {
+        SezzleSessionScrubber.clear()
+    }
 
     private fun validateUrls(checkoutUrl: String, completeUrl: Uri, cancelUrl: Uri) {
         val host = Uri.parse(checkoutUrl).host?.lowercase()

@@ -6,15 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [1.2.5] - 2026-05-22
 
-### Fixed
-- **WebView checkout no longer leaks Sezzle session cookies across users on the same device.** `SezzleCheckoutWebViewActivity` now scrubs `*.sezzle.com` cookies and per-origin Web storage via `CookieManager` + `WebStorage.deleteOrigin(...)` immediately before each `WebView.loadUrl()`. Previously the activity inherited `android.webkit.CookieManager`'s app-wide persistent singleton, so Sezzle cookies set during one user's checkout persisted across merchant-app logouts and surfaced to the next user's first BNPL attempt — even though the SDK was given a different `SezzleCustomer.email` and a fresh `POST /v2/session` UUID. (Poshmark integration report — User A's credit-limit decline showing for User B after a logout/login.)
+### Added
+- **`SezzleSDK.clearWebViewData()`** — new public API for merchants to clear Sezzle's cookies and Web storage from the app-wide `WebView` state. **Call this on user logout** (or account switch) so the next Sezzle checkout starts with a fresh session.
 
-  The scrub is **scoped to Sezzle's own domains** (`checkout.sezzle.com`, `sandbox.checkout.sezzle.com`, `api.sezzle.com`, `sandbox.api.sezzle.com`, `sezzle.com`, `www.sezzle.com`, `sandbox.sezzle.com`). The merchant app's other cookies and storage are not touched — `CookieManager.removeAllCookies()` would also wipe merchant state and is intentionally avoided.
+  ```kotlin
+  // In your merchant app's logout flow:
+  fun onUserLogout() {
+      // ...clear your own session state...
+      SezzleSDK.clearWebViewData()
+  }
+  ```
 
-  Trade-off: returning Sezzle users now re-authenticate to Sezzle on each `WEB_VIEW` checkout in the same app. `SYSTEM_BROWSER` mode (Chrome Custom Tabs) is unaffected and continues to provide persistent Sezzle login via Chrome's cookie store. Use System Browser mode if cookie persistence matters for your UX.
+  Why this is needed: Android's `CookieManager` is an app-wide persistent singleton. Cookies set during one user's Sezzle checkout (auth tokens, session identifiers) persist across users on the same device — without this call, the next user's first BNPL attempt can resume the previous user's Sezzle session and surface their state (e.g. credit-limit decline) to the wrong customer. Reported by Poshmark — User A's credit-limit decline showing for User B after a logout/login.
+
+  The clear is **scoped to Sezzle's own domains** (`checkout.sezzle.com`, `sandbox.checkout.sezzle.com`, `api.sezzle.com`, `sandbox.api.sezzle.com`, `sezzle.com`, `www.sezzle.com`, `sandbox.sezzle.com`). Your other cookies and Web storage are not touched. Safe to call repeatedly; safe to call when no Sezzle checkout has ever run in this process. Preserves your app-wide `CookieManager.acceptCookie()` setting across the call (privacy/GDPR/DNT modes are not silently flipped).
+
+  Affects `WEB_VIEW` mode only. `SYSTEM_BROWSER` mode (Chrome Custom Tabs) shares cookies with Chrome and is outside the SDK's reach.
 
 ### Compatibility
-- No public API change. No new permissions. No new dependencies. Existing integrations recompile without modification.
+- **No automatic clearing.** Merchants who don't call `clearWebViewData()` will still see the cross-user cookie leak in WEB_VIEW mode — this is by design, matching the pattern of competing SDKs (Affirm's `clearCookies(Context)` is the same shape). The SDK does not assume when a logout has happened; you do.
+- No new permissions. No new dependencies. Existing integrations recompile without modification — only merchants implementing multi-user flows need to wire up the new call.
 
 ## [1.2.4] - 2026-05-21
 

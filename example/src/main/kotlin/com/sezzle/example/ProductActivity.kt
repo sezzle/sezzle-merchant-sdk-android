@@ -140,6 +140,36 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
         ))
 
+        // "Simulate logout" button — invokes SezzleSDK.clearWebViewData() so QA can
+        // verify the API does what merchants will use it for: clear Sezzle's cookies
+        // between users on a shared device.
+        stack.addView(
+            Button(this).apply {
+                text = "Simulate logout (clear Sezzle data)"
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                typeface = Typeface.DEFAULT_BOLD
+                isAllCaps = false
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#8333D4"))
+                    cornerRadius = dp(10).toFloat()
+                }
+                minimumHeight = dp(44)
+                setOnClickListener {
+                    SezzleSDK.clearWebViewData()
+                    android.widget.Toast.makeText(
+                        this@ProductActivity,
+                        "Cleared. Next checkout starts fresh.",
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = dp(16) }
+        )
+
         // Server-driven flow demo at the top
         stack.addView(
             createServerDrivenCard(),
