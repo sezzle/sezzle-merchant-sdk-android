@@ -4,10 +4,33 @@ All notable changes to the Sezzle Merchant SDK for Android will be documented in
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.5] - 2026-05-22
+
+### Added
+- **`SezzleSDK.clearWebViewData()`** — new public API for merchants to clear Sezzle's cookies and Web storage from the app-wide `WebView` state. **Call this on user logout** (or account switch) so the next Sezzle checkout starts with a fresh session.
+
+  ```kotlin
+  // In your merchant app's logout flow:
+  fun onUserLogout() {
+      // ...clear your own session state...
+      SezzleSDK.clearWebViewData()
+  }
+  ```
+
+  Why this is needed: Android's `CookieManager` is an app-wide persistent singleton. Cookies set during one user's Sezzle checkout (auth tokens, session identifiers) persist across users on the same device — without this call, the next user's first BNPL attempt can resume the previous user's Sezzle session and surface their state (e.g. credit-limit decline) to the wrong customer.
+
+  The clear is **scoped to Sezzle's own domains** (`checkout.sezzle.com`, `sandbox.checkout.sezzle.com`, `api.sezzle.com`, `sandbox.api.sezzle.com`, `sezzle.com`, `www.sezzle.com`, `sandbox.sezzle.com`). Your other cookies and Web storage are not touched. Safe to call repeatedly; safe to call when no Sezzle checkout has ever run in this process. Preserves your app-wide `CookieManager.acceptCookie()` setting across the call (privacy/GDPR/DNT modes are not silently flipped).
+
+  Affects `WEB_VIEW` mode only. `SYSTEM_BROWSER` mode (Chrome Custom Tabs) shares cookies with Chrome and is outside the SDK's reach.
+
+### Compatibility
+- **No automatic clearing.** Merchants who don't call `clearWebViewData()` will still see the cross-user cookie leak in WEB_VIEW mode. This is intentional — the SDK does not assume when a logout has happened; you do. Returning Sezzle users keep their persistent login between checkouts under the same merchant-app user, which is preferable when only one person uses the device.
+- No new permissions. No new dependencies. Existing integrations recompile without modification — only merchants implementing multi-user flows need to wire up the new call.
+
 ## [1.2.4] - 2026-05-21
 
 ### Added
-- **Lifecycle-safe WebView checkout via `ActivityResultLauncher`.** New `SezzleCheckoutContract` + `SezzleSDK.startCheckoutForResult(...)` overloads deliver the checkout result through the Android Activity Result API instead of the static `SezzleCheckoutListener` reference. The merchant's launcher callback is bound to `ActivityResultRegistry`, which Android re-binds when the host activity is destroyed and recreated — so the result still reaches the live host activity instance. Recommended path for merchants whose host activity may be destroyed mid-checkout under "Don't keep activities" / "Background process limit" / low-memory conditions. (MOBILE → Poshmark integration report)
+- **Lifecycle-safe WebView checkout via `ActivityResultLauncher`.** New `SezzleCheckoutContract` + `SezzleSDK.startCheckoutForResult(...)` overloads deliver the checkout result through the Android Activity Result API instead of the static `SezzleCheckoutListener` reference. The merchant's launcher callback is bound to `ActivityResultRegistry`, which Android re-binds when the host activity is destroyed and recreated — so the result still reaches the live host activity instance. Recommended path for merchants whose host activity may be destroyed mid-checkout under "Don't keep activities" / "Background process limit" / low-memory conditions.
 
   ```kotlin
   private val sezzleLauncher = registerForActivityResult(SezzleCheckoutContract()) { result ->

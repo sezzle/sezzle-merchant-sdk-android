@@ -140,6 +140,36 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
         ))
 
+        // "Simulate logout" button — invokes SezzleSDK.clearWebViewData() so QA can
+        // verify the API does what merchants will use it for: clear Sezzle's cookies
+        // between users on a shared device.
+        stack.addView(
+            Button(this).apply {
+                text = "Simulate logout (clear Sezzle data)"
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                typeface = Typeface.DEFAULT_BOLD
+                isAllCaps = false
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#8333D4"))
+                    cornerRadius = dp(10).toFloat()
+                }
+                minimumHeight = dp(44)
+                setOnClickListener {
+                    SezzleSDK.clearWebViewData()
+                    android.widget.Toast.makeText(
+                        this@ProductActivity,
+                        "Cleared. Next checkout starts fresh.",
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = dp(16) }
+        )
+
         // Server-driven flow demo at the top
         stack.addView(
             createServerDrivenCard(),
@@ -254,7 +284,7 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
      * in WebView mode — the SDK's WebView intercepts before the URL loads.
      */
     private fun startServerDrivenWebViewDemo() {
-        val orderRef = "poshmark-demo-${(1000..9999).random()}"
+        val orderRef = "merchant-demo-${(1000..9999).random()}"
         val completeUrl = Uri.parse("https://example.com/sezzle-checkout/done?orderRef=$orderRef")
         val cancelUrl = Uri.parse("https://example.com/sezzle-checkout/cancelled")
         runServerDrivenDemo(orderRef, completeUrl, cancelUrl, SezzleCheckoutMode.WEB_VIEW)
@@ -267,7 +297,7 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
      * Chrome Custom Tabs wouldn't route the redirect back into the app.
      */
     private fun startServerDrivenSystemBrowserDemo() {
-        val orderRef = "poshmark-demo-${(1000..9999).random()}"
+        val orderRef = "merchant-demo-${(1000..9999).random()}"
         val completeUrl = Uri.parse("sezzle-example://checkout/done?orderRef=$orderRef")
         val cancelUrl = Uri.parse("sezzle-example://checkout/cancelled")
         runServerDrivenDemo(orderRef, completeUrl, cancelUrl, SezzleCheckoutMode.SYSTEM_BROWSER)

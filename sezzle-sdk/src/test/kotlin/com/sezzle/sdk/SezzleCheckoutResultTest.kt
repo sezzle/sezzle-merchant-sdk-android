@@ -25,7 +25,7 @@ class SezzleCheckoutResultTest {
 
     @Test
     fun `server-driven flow populates callbackURL only`() {
-        val url = Uri.parse("poshmark-sezzle://checkout/done?orderRef=12345")
+        val url = Uri.parse("merchant-sezzle://checkout/done?orderRef=12345")
         val result = SezzleCheckoutResult(callbackURL = url)
         assertNull(result.orderUUID)
         assertEquals(url, result.callbackURL)
@@ -33,7 +33,7 @@ class SezzleCheckoutResultTest {
 
     @Test
     fun `query params recoverable from callbackURL`() {
-        val url = Uri.parse("poshmark-sezzle://checkout/done?orderRef=12345&promo=summer")
+        val url = Uri.parse("merchant-sezzle://checkout/done?orderRef=12345&promo=summer")
         val result = SezzleCheckoutResult(callbackURL = url)
 
         assertEquals("12345", result.callbackURL?.getQueryParameter("orderRef"))
