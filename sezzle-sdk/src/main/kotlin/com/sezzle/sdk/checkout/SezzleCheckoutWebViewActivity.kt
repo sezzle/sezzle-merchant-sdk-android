@@ -197,6 +197,7 @@ class SezzleCheckoutWebViewActivity : Activity() {
             insets
         }
 
+        SezzleSessionScrubber.clear()
         webView.loadUrl(urlWithParam)
     }
 

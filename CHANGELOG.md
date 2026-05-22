@@ -4,6 +4,18 @@ All notable changes to the Sezzle Merchant SDK for Android will be documented in
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.5] - 2026-05-22
+
+### Fixed
+- **WebView checkout no longer leaks Sezzle session cookies across users on the same device.** `SezzleCheckoutWebViewActivity` now scrubs `*.sezzle.com` cookies and per-origin Web storage via `CookieManager` + `WebStorage.deleteOrigin(...)` immediately before each `WebView.loadUrl()`. Previously the activity inherited `android.webkit.CookieManager`'s app-wide persistent singleton, so Sezzle cookies set during one user's checkout persisted across merchant-app logouts and surfaced to the next user's first BNPL attempt — even though the SDK was given a different `SezzleCustomer.email` and a fresh `POST /v2/session` UUID. (Poshmark integration report — User A's credit-limit decline showing for User B after a logout/login.)
+
+  The scrub is **scoped to Sezzle's own domains** (`checkout.sezzle.com`, `sandbox.checkout.sezzle.com`, `api.sezzle.com`, `sandbox.api.sezzle.com`, `sezzle.com`, `www.sezzle.com`, `sandbox.sezzle.com`). The merchant app's other cookies and storage are not touched — `CookieManager.removeAllCookies()` would also wipe merchant state and is intentionally avoided.
+
+  Trade-off: returning Sezzle users now re-authenticate to Sezzle on each `WEB_VIEW` checkout in the same app. `SYSTEM_BROWSER` mode (Chrome Custom Tabs) is unaffected and continues to provide persistent Sezzle login via Chrome's cookie store. Use System Browser mode if cookie persistence matters for your UX.
+
+### Compatibility
+- No public API change. No new permissions. No new dependencies. Existing integrations recompile without modification.
+
 ## [1.2.4] - 2026-05-21
 
 ### Added
