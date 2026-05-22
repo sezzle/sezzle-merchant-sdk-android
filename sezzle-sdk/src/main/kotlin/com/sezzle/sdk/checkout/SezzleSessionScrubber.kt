@@ -9,17 +9,16 @@ import android.webkit.WebStorage
  * Android's [CookieManager] is an app-wide persistent singleton — any cookie set during a
  * previous Sezzle checkout (auth tokens, session identifiers) persists across users on the
  * same device, even after the merchant logs the user out of their own app and a different
- * user signs in. Without this scrub, User A's Sezzle session can satisfy the checkout page's
- * "returning customer" cookie check on User B's first attempt, surfacing A's credit-limit /
- * decline state to B. (Reported by Poshmark — iOS has the same bug, fixed there via
- * `WKWebsiteDataStore.nonPersistent()`; Android has no per-WebView ephemeral store equivalent
- * on minSdk 23 without pulling in `androidx.webkit` multi-profile, so we scrub by domain instead.)
+ * user signs in. Without an explicit clear, User A's Sezzle session can satisfy the checkout
+ * page's "returning customer" cookie check on User B's first attempt, surfacing A's
+ * credit-limit / decline state to B. (Reported by Poshmark.)
  *
  * The scrub is **scoped to Sezzle's own domains** — the merchant app's other cookies are
  * untouched. Calling `removeAllCookies()` would wipe the merchant's state too and is unsafe
  * here.
  *
- * Called from [SezzleCheckoutWebViewActivity.onCreate] immediately before `webView.loadUrl(...)`.
+ * Invoked by the public [com.sezzle.sdk.SezzleSDK.clearWebViewData] API, which merchants are
+ * expected to call from their logout flow. Not called automatically by the SDK.
  */
 internal object SezzleSessionScrubber {
 
