@@ -21,7 +21,7 @@ internal class HttpClient(
     private val environment: SezzleEnvironment
 ) {
     companion object {
-        internal const val SDK_VERSION = "1.2.1"
+        internal const val SDK_VERSION = "1.2.6"
     }
 
     /** `Basic {base64(publicKey)}` — no colon. */

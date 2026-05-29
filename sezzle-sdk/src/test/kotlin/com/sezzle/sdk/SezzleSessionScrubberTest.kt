@@ -2,6 +2,7 @@ package com.sezzle.sdk
 
 import android.webkit.CookieManager
 import com.sezzle.sdk.checkout.SezzleSessionScrubber
+import com.sezzle.sdk.models.SezzleEnvironment
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -16,12 +17,19 @@ class SezzleSessionScrubberTest {
 
     private val cookieManager get() = CookieManager.getInstance()
 
+    /** Captures `(environment, cookieHeader)` from each server-logout invocation. */
+    private val logoutCalls = mutableListOf<Pair<SezzleEnvironment, String>>()
+
     @Before
     fun setUp() {
         cookieManager.setAcceptCookie(true)
         // Clear ALL cookies between tests so leftover state from previous tests doesn't leak.
         cookieManager.removeAllCookies(null)
         cookieManager.flush()
+        // Swap the network call for a capture-only spy. Without this, every scrub test that
+        // sets an auth cookie would spawn a daemon thread trying to reach api.sezzle.com.
+        logoutCalls.clear()
+        SezzleSessionScrubber.serverLogout = { env, cookies -> logoutCalls.add(env to cookies) }
     }
 
     @After
@@ -227,5 +235,103 @@ class SezzleSessionScrubberTest {
 
         val value = cookieValue(cookieManager.getCookie("https://checkout.sezzle.com"), "host_only_cookie")
         assertEquals("host-only cookie value leaked: $value", "", value)
+    }
+
+    // MARK: /v4/users/logout invocation
+
+    @Test
+    fun `apiUrl maps env to sezzle-pay host (not gateway)`() {
+        // Locks the host split so a refactor can't silently send /v4/users/logout to the gateway.
+        assertEquals("https://api.sezzle.com", SezzleEnvironment.PRODUCTION.apiUrl)
+        assertEquals("https://sandbox.api.sezzle.com", SezzleEnvironment.SANDBOX.apiUrl)
+    }
+
+    @Test
+    fun `clear fires server logout with access+refresh cookies when present`() {
+        cookieManager.setCookie(
+            "https://checkout.sezzle.com",
+            "access_token=AAA; Domain=.sezzle.com; Path=/; Max-Age=3600",
+        )
+        cookieManager.setCookie(
+            "https://checkout.sezzle.com",
+            "refresh_token=BBB; Domain=.sezzle.com; Path=/; Max-Age=3600",
+        )
+        cookieManager.flush()
+
+        SezzleSessionScrubber.clear(SezzleEnvironment.SANDBOX)
+
+        assertEquals(1, logoutCalls.size)
+        assertEquals(SezzleEnvironment.SANDBOX, logoutCalls[0].first)
+        val header = logoutCalls[0].second
+        assertTrue("access_token missing from Cookie header: $header", header.contains("access_token=AAA"))
+        assertTrue("refresh_token missing from Cookie header: $header", header.contains("refresh_token=BBB"))
+    }
+
+    @Test
+    fun `clear does NOT fire server logout when no auth cookies present`() {
+        // Non-auth Sezzle cookie present — must not trigger the network call.
+        cookieManager.setCookie(
+            "https://checkout.sezzle.com",
+            "analytics_id=keep-tracking; Domain=.sezzle.com; Path=/; Max-Age=3600",
+        )
+        cookieManager.flush()
+
+        SezzleSessionScrubber.clear(SezzleEnvironment.PRODUCTION)
+
+        assertTrue("server logout fired without auth cookies: $logoutCalls", logoutCalls.isEmpty())
+    }
+
+    @Test
+    fun `clear defaults to PRODUCTION when SDK env is unconfigured`() {
+        cookieManager.setCookie(
+            "https://checkout.sezzle.com",
+            "access_token=AAA; Domain=.sezzle.com; Path=/; Max-Age=3600",
+        )
+        cookieManager.flush()
+
+        SezzleSessionScrubber.clear(environment = null)
+
+        assertEquals(1, logoutCalls.size)
+        assertEquals(SezzleEnvironment.PRODUCTION, logoutCalls[0].first)
+    }
+
+    @Test
+    fun `clear only forwards auth cookies — non-auth sezzle cookies are wiped locally but never sent`() {
+        cookieManager.setCookie(
+            "https://checkout.sezzle.com",
+            "access_token=AAA; Domain=.sezzle.com; Path=/; Max-Age=3600",
+        )
+        cookieManager.setCookie(
+            "https://checkout.sezzle.com",
+            "szl_wpe_sid_lt=session-secret; Domain=.sezzle.com; Path=/; Max-Age=3600",
+        )
+        cookieManager.flush()
+
+        SezzleSessionScrubber.clear(SezzleEnvironment.PRODUCTION)
+
+        assertEquals(1, logoutCalls.size)
+        val header = logoutCalls[0].second
+        assertTrue("access_token missing: $header", header.contains("access_token=AAA"))
+        assertTrue(
+            "session-secret was forwarded to logout endpoint when it shouldn't have been: $header",
+            !header.contains("szl_wpe_sid_lt"),
+        )
+    }
+
+    @Test
+    fun `clear still runs local scrub even if server logout would fire`() {
+        cookieManager.setCookie(
+            "https://checkout.sezzle.com",
+            "access_token=AAA; Domain=.sezzle.com; Path=/; Max-Age=3600",
+        )
+        cookieManager.flush()
+
+        SezzleSessionScrubber.clear(SezzleEnvironment.SANDBOX)
+
+        // Server call happened…
+        assertEquals(1, logoutCalls.size)
+        // …AND the local scrub wiped the cookie value.
+        val value = cookieValue(cookieManager.getCookie("https://checkout.sezzle.com"), "access_token")
+        assertEquals("local scrub didn't run after server logout fired: $value", "", value)
     }
 }
