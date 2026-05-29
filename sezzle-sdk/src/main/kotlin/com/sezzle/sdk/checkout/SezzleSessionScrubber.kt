@@ -2,20 +2,25 @@ package com.sezzle.sdk.checkout
 
 import android.webkit.CookieManager
 import android.webkit.WebStorage
+import com.sezzle.sdk.models.SezzleEnvironment
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlin.concurrent.thread
 
 /**
- * Wipes Sezzle-domain cookies + per-origin Web storage from the app-wide WebView state.
+ * Ends Sezzle's session and wipes Sezzle-domain cookies + per-origin Web storage from the
+ * app-wide WebView state.
  *
  * Android's [CookieManager] is an app-wide persistent singleton — any cookie set during a
  * previous Sezzle checkout (auth tokens, session identifiers) persists across users on the
  * same device, even after the merchant logs the user out of their own app and a different
- * user signs in. Without an explicit clear, User A's Sezzle session can satisfy the checkout
- * page's "returning customer" cookie check on User B's first attempt, surfacing A's
- * credit-limit / decline state to B.
+ * user signs in. Wiping locally is necessary but not sufficient: Sezzle's backend also
+ * keeps a refresh-token-bound session that can re-recognize the device on the next checkout
+ * and pre-bind it to the prior user's account. Calling `/v4/users/logout` with the WebView's
+ * cookies makes the backend forget that binding so the next user starts truly fresh.
  *
- * The scrub is **scoped to Sezzle's own domains** — the merchant app's other cookies are
- * untouched. Calling `removeAllCookies()` would wipe the merchant's state too and is unsafe
- * here.
+ * The local scrub is **scoped to Sezzle's own domains** — the merchant app's other cookies are
+ * untouched. Calling `removeAllCookies()` would wipe the merchant's state too and is unsafe here.
  *
  * Invoked by the public [com.sezzle.sdk.SezzleSDK.clearWebViewData] API, which merchants are
  * expected to call from their logout flow. Not called automatically by the SDK.
@@ -58,7 +63,90 @@ internal object SezzleSessionScrubber {
         ),
     )
 
-    fun clear() {
+    /**
+     * Auth cookie names set by Sezzle's checkout backend. `/v4/users/logout` accepts these as
+     * the `Cookie` header. Other Sezzle cookies are wiped locally but not forwarded.
+     */
+    private val AUTH_COOKIE_NAMES: Set<String> = setOf("access_token", "refresh_token")
+
+    /** Short timeout so a slow / unreachable logout endpoint never blocks the merchant's logout flow. */
+    private const val LOGOUT_TIMEOUT_MS = 5000
+
+    /**
+     * Test seam: defaults to firing a real HTTP POST. Unit tests swap this to a capture-only
+     * spy (or no-op) to avoid hitting `api.sezzle.com` during Robolectric runs.
+     */
+    internal var serverLogout: (SezzleEnvironment, String) -> Unit = ::defaultServerLogout
+
+    fun clear(environment: SezzleEnvironment? = null) {
+        // Step 1 (best-effort): ask Sezzle's backend to invalidate the refresh token tied to
+        // this device's WebView session. Errors / timeouts are swallowed by design — the local
+        // scrub below always runs even if the network call fails.
+        invalidateServerSession(environment ?: SezzleEnvironment.PRODUCTION)
+
+        // Step 2: local scrub (cookies + Web storage for Sezzle origins).
+        clearLocalData()
+    }
+
+    private fun invalidateServerSession(environment: SezzleEnvironment) {
+        val cookieManager = CookieManager.getInstance()
+        val authCookies = collectAuthCookies(cookieManager)
+        if (authCookies.isEmpty()) return
+        val cookieHeader = authCookies.entries.joinToString(separator = "; ") { "${it.key}=${it.value}" }
+        serverLogout(environment, cookieHeader)
+    }
+
+    private fun defaultServerLogout(environment: SezzleEnvironment, cookieHeader: String) {
+        // Network on the main thread would crash with NetworkOnMainThreadException. Spin up a
+        // throwaway thread, fire-and-forget. We don't propagate result/errors — the local scrub
+        // is the merchant-facing guarantee; the server call is defense-in-depth.
+        thread(start = true, isDaemon = true, name = "sezzle-logout") {
+            try {
+                val url = URL("${environment.apiUrl}/v4/users/logout")
+                val conn = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = LOGOUT_TIMEOUT_MS
+                    readTimeout = LOGOUT_TIMEOUT_MS
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("Cookie", cookieHeader)
+                    // Don't let the JVM's app-wide CookieHandler attach unrelated cookies.
+                    instanceFollowRedirects = false
+                    doOutput = true
+                }
+                conn.outputStream.use { it.write("{}".toByteArray(Charsets.UTF_8)) }
+                conn.responseCode // drain
+                conn.disconnect()
+            } catch (_: Throwable) {
+                // best-effort
+            }
+        }
+    }
+
+    /**
+     * Reads `access_token` + `refresh_token` cookies from [CookieManager] across the known
+     * Sezzle origins. The first non-blank value wins per cookie name; duplicates across host
+     * variants (e.g. cookie scoped to `.sezzle.com` visible at both `sezzle.com` and
+     * `checkout.sezzle.com`) just collapse to a single entry.
+     */
+    private fun collectAuthCookies(cookieManager: CookieManager): Map<String, String> {
+        val found = linkedMapOf<String, String>()
+        SEZZLE_COOKIE_DOMAINS.keys.forEach { url ->
+            val cookieString = cookieManager.getCookie(url) ?: return@forEach
+            cookieString.split(";").forEach { rawPair ->
+                val pair = rawPair.trim()
+                val eqIdx = pair.indexOf('=')
+                if (eqIdx <= 0) return@forEach
+                val name = pair.substring(0, eqIdx).trim()
+                val value = pair.substring(eqIdx + 1).trim()
+                if (name in AUTH_COOKIE_NAMES && value.isNotEmpty() && name !in found) {
+                    found[name] = value
+                }
+            }
+        }
+        return found
+    }
+
+    private fun clearLocalData() {
         val cookieManager = CookieManager.getInstance()
 
         // CookieManager is an app-wide singleton. If the merchant has set `acceptCookie=false`

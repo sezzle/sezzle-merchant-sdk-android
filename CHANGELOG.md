@@ -4,6 +4,28 @@ All notable changes to the Sezzle Merchant SDK for Android will be documented in
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.6] - 2026-05-29
+
+### Fixed
+- **`clearWebViewData()` now also invalidates the server-side Sezzle session.** On a real device, even after the WebView's cookies and Web storage are fully cleared (which 1.2.5's scrub does correctly), Sezzle's backend was still able to recognize the device on the next checkout and pre-bind the new session to the prior user's account — so merchant apps with multi-user flows could see the next user land on the place-order screen authenticated as the previous user.
+
+  As of 1.2.6, `clearWebViewData()` now performs **two** steps in order:
+
+  1. Reads the WebView's Sezzle `access_token` + `refresh_token` cookies via `CookieManager.getCookie(...)` (if present) and POSTs them to `/v4/users/logout` so the backend invalidates the refresh token and forgets the device→user binding. Best-effort, off the main thread — 5-second connect/read timeout, errors are swallowed so a slow network never blocks the merchant's logout flow.
+  2. Performs the existing local scrub (cookies + per-origin Web storage for Sezzle domains).
+
+  Merchants don't need to change anything — same public API, same call site on user logout.
+
+  ```kotlin
+  // Same call as before — now closes the loop server-side as well.
+  SezzleSDK.clearWebViewData()
+  ```
+
+### Compatibility
+- No public API changes. No new permissions. No new dependencies.
+- The logout call uses `HttpURLConnection` against `api.sezzle.com` (or `sandbox.api.sezzle.com` when `configure(...)`d with `SezzleEnvironment.SANDBOX`). If the SDK was never configured (server-driven flow), the call defaults to production.
+- No-op when no Sezzle auth cookies are present (safe to call repeatedly, safe to call when no Sezzle checkout has ever run).
+
 ## [1.2.5] - 2026-05-22
 
 ### Added
