@@ -63,12 +63,6 @@ internal object SezzleSessionScrubber {
         ),
     )
 
-    /**
-     * Auth cookie names set by Sezzle's checkout backend. `/v4/users/logout` accepts these as
-     * the `Cookie` header. Other Sezzle cookies are wiped locally but not forwarded.
-     */
-    private val AUTH_COOKIE_NAMES: Set<String> = setOf("access_token", "refresh_token")
-
     /** Short timeout so a slow / unreachable logout endpoint never blocks the merchant's logout flow. */
     private const val LOGOUT_TIMEOUT_MS = 5000
 
@@ -90,9 +84,9 @@ internal object SezzleSessionScrubber {
 
     private fun invalidateServerSession(environment: SezzleEnvironment) {
         val cookieManager = CookieManager.getInstance()
-        val authCookies = collectAuthCookies(cookieManager)
-        if (authCookies.isEmpty()) return
-        val cookieHeader = authCookies.entries.joinToString(separator = "; ") { "${it.key}=${it.value}" }
+        val sezzleCookies = collectSezzleCookies(cookieManager)
+        if (sezzleCookies.isEmpty()) return
+        val cookieHeader = sezzleCookies.entries.joinToString(separator = "; ") { "${it.key}=${it.value}" }
         serverLogout(environment, cookieHeader)
     }
 
@@ -123,12 +117,14 @@ internal object SezzleSessionScrubber {
     }
 
     /**
-     * Reads `access_token` + `refresh_token` cookies from [CookieManager] across the known
-     * Sezzle origins. The first non-blank value wins per cookie name; duplicates across host
-     * variants (e.g. cookie scoped to `.sezzle.com` visible at both `sezzle.com` and
-     * `checkout.sezzle.com`) just collapse to a single entry.
+     * Reads every cookie [CookieManager] has for the known Sezzle origins. The first non-blank
+     * value wins per cookie name; duplicates across host variants (e.g. a cookie scoped to
+     * `.sezzle.com` visible at both `sezzle.com` and `checkout.sezzle.com`) collapse to a
+     * single entry. We forward all of them because the backend's binding paths key on multiple
+     * cookies (`access_token`, `refresh_token`, `__szl_email`, `trk_id`, `szl_wpe_sid`, etc.)
+     * and the SDK doesn't know which subset is load-bearing for a given logout.
      */
-    private fun collectAuthCookies(cookieManager: CookieManager): Map<String, String> {
+    private fun collectSezzleCookies(cookieManager: CookieManager): Map<String, String> {
         val found = linkedMapOf<String, String>()
         SEZZLE_COOKIE_DOMAINS.keys.forEach { url ->
             val cookieString = cookieManager.getCookie(url) ?: return@forEach
@@ -138,7 +134,7 @@ internal object SezzleSessionScrubber {
                 if (eqIdx <= 0) return@forEach
                 val name = pair.substring(0, eqIdx).trim()
                 val value = pair.substring(eqIdx + 1).trim()
-                if (name in AUTH_COOKIE_NAMES && value.isNotEmpty() && name !in found) {
+                if (value.isNotEmpty() && name !in found) {
                     found[name] = value
                 }
             }
