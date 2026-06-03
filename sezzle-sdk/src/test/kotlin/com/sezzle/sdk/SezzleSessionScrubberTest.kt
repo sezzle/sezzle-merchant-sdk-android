@@ -268,17 +268,17 @@ class SezzleSessionScrubberTest {
     }
 
     @Test
-    fun `clear does NOT fire server logout when no auth cookies present`() {
-        // Non-auth Sezzle cookie present — must not trigger the network call.
+    fun `clear does NOT fire server logout when no Sezzle cookies present`() {
+        // Only non-Sezzle cookies are present — server logout must not fire.
         cookieManager.setCookie(
-            "https://checkout.sezzle.com",
-            "analytics_id=keep-tracking; Domain=.sezzle.com; Path=/; Max-Age=3600",
+            "https://api.merchant.example",
+            "merchant_session=secret; Domain=.merchant.example; Path=/; Max-Age=3600",
         )
         cookieManager.flush()
 
         SezzleSessionScrubber.clear(SezzleEnvironment.PRODUCTION)
 
-        assertTrue("server logout fired without auth cookies: $logoutCalls", logoutCalls.isEmpty())
+        assertTrue("server logout fired without any Sezzle cookies: $logoutCalls", logoutCalls.isEmpty())
     }
 
     @Test
@@ -296,7 +296,7 @@ class SezzleSessionScrubberTest {
     }
 
     @Test
-    fun `clear only forwards auth cookies — non-auth sezzle cookies are wiped locally but never sent`() {
+    fun `clear forwards every Sezzle cookie to logout — backend decides which are meaningful`() {
         cookieManager.setCookie(
             "https://checkout.sezzle.com",
             "access_token=AAA; Domain=.sezzle.com; Path=/; Max-Age=3600",
@@ -313,8 +313,8 @@ class SezzleSessionScrubberTest {
         val header = logoutCalls[0].second
         assertTrue("access_token missing: $header", header.contains("access_token=AAA"))
         assertTrue(
-            "session-secret was forwarded to logout endpoint when it shouldn't have been: $header",
-            !header.contains("szl_wpe_sid_lt"),
+            "szl_wpe_sid_lt should be forwarded too — SDK does not filter cookies: $header",
+            header.contains("szl_wpe_sid_lt"),
         )
     }
 
