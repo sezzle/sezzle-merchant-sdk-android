@@ -59,7 +59,7 @@ afterEvaluate {
             register<MavenPublication>("release") {
                 groupId = "com.sezzle"
                 artifactId = "sezzle-merchant-sdk"
-                version = "1.2.7"
+                version = "1.3.0"
                 from(components["release"])
 
                 pom {

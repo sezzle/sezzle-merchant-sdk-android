@@ -118,6 +118,7 @@ internal object SessionRequest {
                 for (opt in options) arr.put(opt.value)
                 put("checkout_financing_options", arr)
             }
+            put("checkout_mode", order.userAgentMode.value)
         }
     }
 

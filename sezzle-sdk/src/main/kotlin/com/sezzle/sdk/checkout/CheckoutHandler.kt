@@ -1,6 +1,8 @@
 package com.sezzle.sdk.checkout
 
+import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -28,6 +30,45 @@ internal class CheckoutHandler(
         const val CALLBACK_SCHEME = "sezzle-sdk"
         val DEFAULT_COMPLETE_URL: Uri = Uri.parse("sezzle-sdk://checkout/confirmed")
         val DEFAULT_CANCEL_URL: Uri = Uri.parse("sezzle-sdk://checkout/cancelled")
+
+        /**
+         * Appends the SDK's checkout-URL params: `isWebView=true`, `isMerchantSDK=true`, plus
+         * [theme] (`dark`/`light`) when supplied.
+         *
+         * Both flags are sent, and they mean different things. `isWebView` tells checkout it
+         * is embedded rather than standalone, which is what suppresses checkout's own
+         * navigation bar (the SDK supplies its own close-button header, so two bars would
+         * stack). `isMerchantSDK` narrows that to *this* SDK rather than the Sezzle consumer
+         * app, which keeps the authentication back button available and suppresses the
+         * third-party OAuth providers that can't complete inside an embedded WebView.
+         *
+         * Checkout doesn't reliably pick up the app's appearance via `prefers-color-scheme`
+         * inside a WebView, so [theme] is passed explicitly. A `theme` already present on the
+         * URL is respected (not overridden).
+         *
+         * [theme] is `null` on the lifecycle-safe launcher path, which has no activity to
+         * detect night mode from at call time. In that case
+         * [SezzleCheckoutWebViewActivity] fills it in from its own screen-configured
+         * context — `Resources.getSystem()` does not reliably report night mode, so we
+         * never use it.
+         */
+        internal fun appendSdkParams(url: String, theme: String?): Uri {
+            val parsed = Uri.parse(url)
+            val builder = parsed.buildUpon()
+                .appendQueryParameter("isWebView", "true")
+                .appendQueryParameter("isMerchantSDK", "true")
+            if (theme != null && parsed.getQueryParameter("theme") == null) {
+                builder.appendQueryParameter("theme", theme)
+            }
+            return builder.build()
+        }
+
+        /** `dark` when the context reports night mode, otherwise `light`. */
+        internal fun resolveTheme(context: Context): String {
+            val nightMode =
+                context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+            return if (nightMode == Configuration.UI_MODE_NIGHT_YES) "dark" else "light"
+        }
 
         /** Matches if [uri] shares scheme + host + path with [target]. Query/fragment may differ. */
         internal fun matches(uri: Uri, target: Uri): Boolean {
@@ -90,9 +131,7 @@ internal class CheckoutHandler(
                 )
 
                 mainHandler.post {
-                    val checkoutUri = Uri.parse(response.checkoutURL).buildUpon()
-                        .appendQueryParameter("isWebView", "true")
-                        .build()
+                    val checkoutUri = appendSdkParams(response.checkoutURL, resolveTheme(activity))
 
                     presentCheckout(
                         activity = activity,
@@ -126,9 +165,7 @@ internal class CheckoutHandler(
         // No event logging — no public key on this path.
         // No session creation — merchant did it server-side.
 
-        val checkoutUri = Uri.parse(checkoutUrl).buildUpon()
-            .appendQueryParameter("isWebView", "true")
-            .build()
+        val checkoutUri = appendSdkParams(checkoutUrl, resolveTheme(activity))
 
         presentCheckout(
             activity = activity,
@@ -159,6 +196,7 @@ internal class CheckoutHandler(
             }
         }
     }
+
 
     /** Wrap a listener to log analytics events via [eventLogger] (no-op when logger is null). */
     private fun wrapWithEventLogging(listener: SezzleCheckoutListener): SezzleCheckoutListener {
@@ -283,9 +321,7 @@ internal class CheckoutHandler(
 
                 mainHandler.post {
                     try {
-                        val checkoutUri = Uri.parse(response.checkoutURL).buildUpon()
-                            .appendQueryParameter("isWebView", "true")
-                            .build()
+                        val checkoutUri = appendSdkParams(response.checkoutURL, null)
                         launcher.launch(
                             SezzleCheckoutContract.Input(
                                 checkoutUrl = checkoutUri.toString(),
@@ -317,9 +353,7 @@ internal class CheckoutHandler(
         cancelUrl: Uri,
         launcher: ActivityResultLauncher<SezzleCheckoutContract.Input>,
     ) {
-        val checkoutUri = Uri.parse(checkoutUrl).buildUpon()
-            .appendQueryParameter("isWebView", "true")
-            .build()
+        val checkoutUri = appendSdkParams(checkoutUrl, null)
         launcher.launch(
             SezzleCheckoutContract.Input(
                 checkoutUrl = checkoutUri.toString(),

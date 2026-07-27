@@ -3,6 +3,7 @@ package com.sezzle.sdk.checkout
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
@@ -82,8 +83,19 @@ class SezzleCheckoutWebViewActivity : Activity() {
             return
         }
 
-        // isWebView=true is already appended by CheckoutHandler
-        val urlWithParam = checkoutUrl
+        // isWebView + isMerchantSDK are appended by CheckoutHandler. The `theme` param is added there too
+        // on the legacy activity paths, but the lifecycle-safe launcher path has no activity
+        // to detect night mode from — so fill it in here from this Activity's screen-configured
+        // context when absent. Checkout doesn't pick up the app's appearance via
+        // prefers-color-scheme inside a WebView, so it must be passed explicitly.
+        val parsedUrl = Uri.parse(checkoutUrl)
+        val urlWithParam = if (parsedUrl.getQueryParameter("theme") != null) {
+            checkoutUrl
+        } else {
+            val nightMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+            val theme = if (nightMode == Configuration.UI_MODE_NIGHT_YES) "dark" else "light"
+            parsedUrl.buildUpon().appendQueryParameter("theme", theme).build().toString()
+        }
 
         val density = resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
