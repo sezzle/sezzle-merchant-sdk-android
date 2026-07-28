@@ -15,13 +15,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
   The SDK always sends a concrete `dark` or `light`, never `system` — so checkout follows the *host app's* appearance rather than the device-level setting. For an app that pins itself to light mode on a device set to dark, checkout stays light and matches the surrounding app.
 
-  **Note:** dark rendering is gated on the checkout side and is not yet active for SDK checkouts. Checkout only applies a dark palette when its dark-theme rollout flag resolves for the shopper, and that flag is not evaluated before the shopper authenticates — which in an SDK checkout is after the page has already rendered. The SDK sends the parameter correctly today; checkout will honour it once that gating changes. Until then expect a light checkout regardless of the host app's appearance.
+  **Note:** checkout applies the dark palette only once its dark-theme rollout flag resolves for the shopper, and that flag is evaluated per user — so it does not resolve until the shopper has authenticated. In an SDK checkout the shopper logs in *on* the checkout page, so the pre-login screens (welcome, phone entry, verification) render light and the page switches to dark after login. The SDK sends the parameter correctly from the first request and checkout stores it, so no SDK change is needed; closing the pre-login gap is a checkout-side change.
 
 - **`SezzleUserAgentMode` on `SezzleOrder`, defaulting to `REDIRECT`.** Sent as `order.checkout_mode` on `POST /v2/session` and recorded on the checkout as `sezzle_user_agent_mode`. Checkout previously had no mode recorded for SDK-created sessions and emitted a diagnostic event for the omission; `REDIRECT` is the accurate description of how this SDK operates, since completion is detected from the redirect to your complete or cancel URL.
 
   Override it via `SezzleOrder(..., userAgentMode = ...)` if you have a reason to. Note this only applies to sessions the SDK creates — on the server-driven `startCheckout(checkoutUrl = ...)` path the session is created by your backend, so set `order.checkout_mode` there instead.
 
   Named to avoid confusion with the existing `SezzleCheckoutMode`, which is unrelated and controls whether this SDK presents checkout in the system browser or an in-app WebView.
+
+### Fixed
+- **The SDK's WebView header now follows the host app's appearance.** The header bar the SDK draws above the checkout WebView had its background, close icon and divider hardcoded to light values, so in a dark-mode app it stayed white above a dark checkout page. It now resolves against the host app's night-mode configuration, using the same dark surface as the promotional modal (`#1C1230`) so the two Sezzle surfaces match. Light-mode colours are unchanged.
+
+  iOS was unaffected — its header already used the system's dynamic colours, which adapt on their own.
 
 ### Compatibility
 - **Additive API change.** `SezzleOrder` gains one parameter with a default value, so existing constructor calls compile unchanged.
