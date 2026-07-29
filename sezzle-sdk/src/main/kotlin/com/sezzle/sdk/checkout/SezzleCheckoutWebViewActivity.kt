@@ -3,6 +3,7 @@ package com.sezzle.sdk.checkout
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
@@ -24,6 +25,7 @@ import androidx.core.view.WindowInsetsCompat
 import com.sezzle.sdk.SezzleCheckoutListener
 import com.sezzle.sdk.SezzleCheckoutResult
 import com.sezzle.sdk.models.SezzleError
+import com.sezzle.sdk.promotional.SezzleBrand
 
 /**
  * Presents the Sezzle checkout in a WebView inside the app.
@@ -82,27 +84,53 @@ class SezzleCheckoutWebViewActivity : Activity() {
             return
         }
 
-        // isWebView=true is already appended by CheckoutHandler
-        val urlWithParam = checkoutUrl
+        // isWebView + isMerchantSDK are appended by CheckoutHandler. The `theme` param is added there too
+        // on the legacy activity paths, but the lifecycle-safe launcher path has no activity
+        // to detect night mode from — so fill it in here from this Activity's screen-configured
+        // context when absent. Checkout doesn't pick up the app's appearance via
+        // prefers-color-scheme inside a WebView, so it must be passed explicitly.
+        val isNightMode =
+            (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                Configuration.UI_MODE_NIGHT_YES
+
+        val parsedUrl = Uri.parse(checkoutUrl)
+        val urlWithParam = if (parsedUrl.getQueryParameter("theme") != null) {
+            checkoutUrl
+        } else {
+            val theme = if (isNightMode) "dark" else "light"
+            parsedUrl.buildUpon().appendQueryParameter("theme", theme).build().toString()
+        }
+
+        // The SDK draws its own header above the WebView. Checkout renders dark when the host
+        // app is dark, so this chrome has to follow or the bar stays light above a dark page.
+        val chromeBg =
+            if (isNightMode) SezzleBrand.CHECKOUT_CHROME_BG_DARK_MODE
+            else SezzleBrand.CHECKOUT_CHROME_BG
+        val chromeIcon =
+            if (isNightMode) SezzleBrand.CHECKOUT_CHROME_ICON_DARK_MODE
+            else SezzleBrand.CHECKOUT_CHROME_ICON
+        val chromeDivider =
+            if (isNightMode) SezzleBrand.CHECKOUT_CHROME_DIVIDER_DARK_MODE
+            else SezzleBrand.CHECKOUT_CHROME_DIVIDER
 
         val density = resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.WHITE)
+            setBackgroundColor(chromeBg)
         }
 
         // Header
         val header = FrameLayout(this).apply {
-            setBackgroundColor(Color.WHITE)
+            setBackgroundColor(chromeBg)
             setPadding(dp(16), dp(12), dp(16), dp(12))
         }
 
         // Close button
         val closeButton = TextView(this).apply {
             text = "✕"
-            setTextColor(Color.parseColor("#333333"))
+            setTextColor(chromeIcon)
             textSize = 18f
             setPadding(dp(8), dp(4), dp(8), dp(4))
             setOnClickListener {
@@ -123,7 +151,7 @@ class SezzleCheckoutWebViewActivity : Activity() {
 
         // Separator
         root.addView(View(this).apply {
-            setBackgroundColor(Color.parseColor("#E5E5EA"))
+            setBackgroundColor(chromeDivider)
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             (0.5f * density).toInt()

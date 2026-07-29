@@ -35,6 +35,18 @@ object SezzleBrand {
     val HANDLE = Color.parseColor("#DDDDDD")
     val HANDLE_DARK_MODE = Color.parseColor("#444444")
 
+    /**
+     * Checkout WebView chrome — the SDK-drawn header bar above the WebView.
+     * Dark values track the modal so the two surfaces match; light values are
+     * the originals and are unchanged.
+     */
+    val CHECKOUT_CHROME_BG = Color.WHITE
+    val CHECKOUT_CHROME_BG_DARK_MODE = MODAL_BG_DARK_MODE
+    val CHECKOUT_CHROME_ICON = Color.parseColor("#333333")
+    val CHECKOUT_CHROME_ICON_DARK_MODE = DARK_PURPLE_DARK_MODE
+    val CHECKOUT_CHROME_DIVIDER = Color.parseColor("#E5E5EA")
+    val CHECKOUT_CHROME_DIVIDER_DARK_MODE = HANDLE_DARK_MODE
+
     /** Create a pie chart View for a given payment step. */
     fun pieChartView(context: Context, step: Int, totalSteps: Int = 4, sizePx: Int): View {
         return PieChartView(context, step, totalSteps, sizePx)

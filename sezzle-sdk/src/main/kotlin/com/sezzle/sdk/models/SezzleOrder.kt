@@ -13,5 +13,6 @@ data class SezzleOrder(
     val metadata: Map<String, String>? = null,
     val requiresShippingInfo: Boolean? = null,
     val locale: SezzleLocale? = null,
-    val checkoutFinancingOptions: List<SezzleFinancingOption>? = null
+    val checkoutFinancingOptions: List<SezzleFinancingOption>? = null,
+    val userAgentMode: SezzleUserAgentMode = SezzleUserAgentMode.REDIRECT
 )

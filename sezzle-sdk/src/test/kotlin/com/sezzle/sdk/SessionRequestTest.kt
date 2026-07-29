@@ -127,4 +127,37 @@ class SessionRequestTest {
         val json = SessionRequest.fromCheckout(makeCheckout(items = null))
         assertFalse(json.getJSONObject("order").has("items"))
     }
+
+    /**
+     * Checkout logs a MissingUserAgentMode event when sezzle_user_agent_mode is absent, so the
+     * SDK always sends a mode. `redirect` is correct for both presentation modes — completion
+     * is detected from the redirect to the complete/cancel URL.
+     */
+    @Test
+    fun `checkout_mode defaults to redirect`() {
+        val json = SessionRequest.fromCheckout(makeCheckout())
+        assertEquals("redirect", json.getJSONObject("order").getString("checkout_mode"))
+    }
+
+    @Test
+    fun `checkout_mode can be overridden`() {
+        val checkout = SezzleCheckout(
+            customer = SezzleCustomer(email = "test@example.com"),
+            order = SezzleOrder(
+                referenceId = "order-mode-override",
+                amount = SezzleAmount(amountInCents = 1000, currency = "USD"),
+                userAgentMode = SezzleUserAgentMode.IFRAME
+            )
+        )
+        val json = SessionRequest.fromCheckout(checkout)
+        assertEquals("iframe", json.getJSONObject("order").getString("checkout_mode"))
+    }
+
+    /** Wire values must match checkout's CheckoutModes enum exactly. */
+    @Test
+    fun `user agent mode wire values match checkout contract`() {
+        assertEquals("redirect", SezzleUserAgentMode.REDIRECT.value)
+        assertEquals("iframe", SezzleUserAgentMode.IFRAME.value)
+        assertEquals("popup", SezzleUserAgentMode.POPUP.value)
+    }
 }
