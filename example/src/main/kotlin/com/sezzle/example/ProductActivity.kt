@@ -295,11 +295,17 @@ class ProductActivity : AppCompatActivity(), SezzleCheckoutListener {
      * The example app's AndroidManifest.xml registers an intent-filter for
      * `sezzle-example://checkout` pointing at SezzleRedirectActivity — without it,
      * Chrome Custom Tabs wouldn't route the redirect back into the app.
+     *
+     * Uses the SDK's own `sezzle-sdk` scheme rather than this app's `sezzle-example`
+     * one, because `POST /v2/session` validates callback URLs against a server-side
+     * scheme allowlist and rejects anything outside it with a 400. `sezzle-sdk` is on
+     * that list; `sezzle-example` is not. A merchant shipping their own scheme has to
+     * get it allowlisted by Sezzle first — the manifest entry alone is not enough.
      */
     private fun startServerDrivenSystemBrowserDemo() {
         val orderRef = "merchant-demo-${(1000..9999).random()}"
-        val completeUrl = Uri.parse("sezzle-example://checkout/done?orderRef=$orderRef")
-        val cancelUrl = Uri.parse("sezzle-example://checkout/cancelled")
+        val completeUrl = Uri.parse("sezzle-sdk://checkout/done?orderRef=$orderRef")
+        val cancelUrl = Uri.parse("sezzle-sdk://checkout/cancelled")
         runServerDrivenDemo(orderRef, completeUrl, cancelUrl, SezzleCheckoutMode.SYSTEM_BROWSER)
     }
 

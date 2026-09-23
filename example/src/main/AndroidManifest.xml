@@ -17,11 +17,16 @@
         <activity android:name=".ResultActivity" />
 
         <!--
-            Server-driven SYSTEM_BROWSER demo: register an intent-filter for the
-            custom callback scheme this app uses (sezzle-example://checkout).
-            The SDK's bundled manifest only covers `sezzle-sdk://checkout` — merchants
-            using their own scheme with system-browser mode (Chrome <137 / Custom Tabs
-            fallback) must add an entry like this in their own AndroidManifest.
+            Reference for merchants shipping their own callback scheme with
+            system-browser mode (Chrome <137 / Custom Tabs fallback): the SDK's bundled
+            manifest only covers `sezzle-sdk://checkout`, so any other scheme needs an
+            entry like this in the merchant's own AndroidManifest.
+
+            Registered but deliberately unused by the demos. `POST /v2/session` validates
+            callback URLs against a server-side scheme allowlist and rejects anything
+            outside it with a 400, and `sezzle-example` is not on that list — so the
+            manifest entry alone is not sufficient. A merchant's scheme has to be
+            allowlisted by Sezzle before it works end to end.
         -->
         <activity
             android:name="com.sezzle.sdk.checkout.SezzleRedirectActivity"

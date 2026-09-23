@@ -32,15 +32,20 @@ internal class CheckoutHandler(
         val DEFAULT_CANCEL_URL: Uri = Uri.parse("sezzle-sdk://checkout/cancelled")
 
         /**
-         * Appends the SDK's checkout-URL params: `isWebView=true`, `isMerchantSDK=true`, plus
-         * [theme] (`dark`/`light`) when supplied.
+         * Appends the SDK's checkout-URL params: `isNativeSDK=true`, plus [theme]
+         * (`dark`/`light`) when supplied.
          *
-         * Both flags are sent, and they mean different things. `isWebView` tells checkout it
-         * is embedded rather than standalone, which is what suppresses checkout's own
-         * navigation bar (the SDK supplies its own close-button header, so two bars would
-         * stack). `isMerchantSDK` narrows that to *this* SDK rather than the Sezzle consumer
-         * app, which keeps the authentication back button available and suppresses the
-         * third-party OAuth providers that can't complete inside an embedded WebView.
+         * `isNativeSDK` tells checkout it is embedded in a native SDK host rather than
+         * running standalone. It suppresses checkout's own navigation bar (the SDK supplies
+         * its own close-button header, so two bars would stack), keeps the authentication
+         * back button available, and suppresses the third-party OAuth providers that can't
+         * complete inside an embedded WebView.
+         *
+         * `isWebView` is deliberately not sent. Checkout reads that flag as "the Sezzle
+         * consumer app", which routes the TILA disclosure through a React Native postMessage
+         * no merchant app listens for, and turns return-to-store into a postMessage instead
+         * of a plain navigation to the merchant's return URL. Everything the SDK needs from
+         * it is covered by `isNativeSDK`.
          *
          * Checkout doesn't reliably pick up the app's appearance via `prefers-color-scheme`
          * inside a WebView, so [theme] is passed explicitly. A `theme` already present on the
@@ -55,8 +60,7 @@ internal class CheckoutHandler(
         internal fun appendSdkParams(url: String, theme: String?): Uri {
             val parsed = Uri.parse(url)
             val builder = parsed.buildUpon()
-                .appendQueryParameter("isWebView", "true")
-                .appendQueryParameter("isMerchantSDK", "true")
+                .appendQueryParameter("isNativeSDK", "true")
             if (theme != null && parsed.getQueryParameter("theme") == null) {
                 builder.appendQueryParameter("theme", theme)
             }
