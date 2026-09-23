@@ -84,7 +84,7 @@ class SezzleCheckoutWebViewActivity : Activity() {
             return
         }
 
-        // isWebView + isMerchantSDK are appended by CheckoutHandler. The `theme` param is added there too
+        // isNativeSDK is appended by CheckoutHandler. The `theme` param is added there too
         // on the legacy activity paths, but the lifecycle-safe launcher path has no activity
         // to detect night mode from — so fill it in here from this Activity's screen-configured
         // context when absent. Checkout doesn't pick up the app's appearance via
@@ -243,7 +243,13 @@ class SezzleCheckoutWebViewActivity : Activity() {
         if (!resultDelivered) {
             deliverResult(TerminalResult.UserDismissed)
         }
-        webView.destroy()
+        // onCreate returns early when the checkout URL extra is missing — which happens when
+        // the system relaunches this task from Recents after a process kill, since Intent
+        // extras don't survive that. finish() there still routes through onDestroy, so the
+        // WebView may never have been built.
+        if (::webView.isInitialized) {
+            webView.destroy()
+        }
         super.onDestroy()
     }
 
