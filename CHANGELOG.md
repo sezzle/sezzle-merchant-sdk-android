@@ -4,10 +4,12 @@ All notable changes to the Sezzle Merchant SDK for Android will be documented in
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [1.3.0] - 2026-07-27
+## [1.3.0] - 2026-09-23
 
 ### Added
-- **`isMerchantSDK=true` on the checkout URL, sent alongside the existing `isWebView=true`.** The two flags mean different things and both are required. `isWebView` tells checkout it is embedded rather than standalone, which is what suppresses checkout's own navigation bar — this SDK draws its own close-button header, so without the flag two bars stack. `isMerchantSDK` then narrows that to *this* SDK rather than the Sezzle consumer app: checkout keeps the authentication back button available and suppresses the third-party OAuth sign-in providers, which do not complete reliably inside an embedded WebView.
+- **`isNativeSDK=true` on the checkout URL, replacing the `isWebView=true` this SDK previously sent.** A single flag now covers everything the SDK needs: checkout suppresses its own navigation bar (this SDK draws its own close-button header, so two bars would otherwise stack), keeps the authentication back button available, and suppresses the third-party OAuth sign-in providers that do not complete reliably inside an embedded WebView.
+
+  `isWebView` is no longer sent, and that is deliberate. Checkout reads that flag as "the Sezzle consumer app" and takes two code paths that assume its React Native bridge: it hands the consumer-lending disclosure off via a `postMessage` that a merchant app does not implement, and it turns return-to-store into a `postMessage` instead of a plain navigation to your return URL. Dropping the flag resolves both — the disclosure now opens normally and return-to-store navigates as expected.
 
 - **`theme` on the checkout URL, auto-detected from the host app's appearance.** Resolved from `Configuration.UI_MODE_NIGHT_MASK` and sent as `theme=dark` or `theme=light`. Checkout does not reliably observe the host app's appearance through `prefers-color-scheme` inside a WebView, so the SDK passes it explicitly. A `theme` already present on a merchant-supplied checkout URL is respected and never overridden.
 
@@ -24,6 +26,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   Named to avoid confusion with the existing `SezzleCheckoutMode`, which is unrelated and controls whether this SDK presents checkout in the system browser or an in-app WebView.
 
 ### Fixed
+- **Fatal crash when the checkout WebView activity is relaunched without its Intent extras.** `SezzleCheckoutWebViewActivity` carries its checkout URL in a non-persistable Intent extra and runs under `taskAffinity=""`, making it its own task root. When the system relaunched that task from Recents after killing the host process, the extras were gone: `onCreate` correctly bailed out and finished the activity, but `onDestroy` still called `destroy()` on a `WebView` that had never been built, throwing `UninitializedPropertyAccessException` and taking the host app down with it. The teardown now checks that the WebView exists before releasing it.
+
+  Low volume in practice, since it needs a process kill while checkout is on screen, but it was a hard crash of the merchant's app rather than a Sezzle-only failure. The early-return path still reports `invalid_response` to your `ActivityResultLauncher`, unchanged.
+
 - **The SDK's WebView header now follows the host app's appearance.** The header bar the SDK draws above the checkout WebView had its background, close icon and divider hardcoded to light values, so in a dark-mode app it stayed white above a dark checkout page. It now resolves against the host app's night-mode configuration, using the same dark surface as the promotional modal (`#1C1230`) so the two Sezzle surfaces match. Light-mode colours are unchanged.
 
   iOS was unaffected — its header already used the system's dynamic colours, which adapt on their own.
@@ -31,11 +37,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ### Compatibility
 - **Additive API change.** `SezzleOrder` gains one parameter with a default value, so existing constructor calls compile unchanged.
 - No new permissions, no manifest changes required of merchants, and no new dependencies.
-- Merchants who construct their own checkout URL and pass it to `startCheckout(checkoutUrl = ...)` will now see `isMerchantSDK` and `theme` appended to it, in addition to the `isWebView` this SDK already appended. Any `theme` you set yourself is preserved.
-- No change to checkout's navigation bar, which `isWebView` continues to suppress.
-
-### Notes
-- A handful of checkout behaviours still key off `isWebView` alone and assume the Sezzle consumer app's React Native bridge — notably the consumer-lending disclosure hand-off for purchase-request and gift-card checkouts, which posts to a bridge a merchant app does not implement. Those paths need an `isMerchantSDK` exclusion on the checkout side; that work is tracked separately and is not addressed by this release.
+- Merchants who construct their own checkout URL and pass it to `startCheckout(checkoutUrl = ...)` will now see `isNativeSDK` and `theme` appended to it, and will no longer see `isWebView`. Any `theme` you set yourself is preserved.
+- No change to checkout's navigation bar, which `isNativeSDK` now suppresses in place of `isWebView`.
 
 ## [1.2.7] - 2026-06-03
 

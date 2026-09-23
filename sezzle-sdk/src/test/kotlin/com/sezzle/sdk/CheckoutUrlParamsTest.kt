@@ -11,21 +11,20 @@ import org.robolectric.RobolectricTestRunner
 class CheckoutUrlParamsTest {
 
     @Test
-    fun `appends isMerchantSDK`() {
+    fun `appends isNativeSDK`() {
         val uri = CheckoutHandler.appendSdkParams("https://checkout.sezzle.com/?id=abc", "light")
-        assertEquals("true", uri.getQueryParameter("isMerchantSDK"))
+        assertEquals("true", uri.getQueryParameter("isNativeSDK"))
     }
 
     /**
-     * isWebView is what suppresses checkout's own navigation bar. The SDK draws its own
-     * close-button header, so dropping this flag stacks two bars. It must be sent alongside
-     * isMerchantSDK, not replaced by it.
+     * isNativeSDK alone suppresses checkout's navigation bar, so isWebView is redundant for
+     * chrome. Sending it is actively harmful: checkout reads it as the Sezzle consumer app and
+     * routes TILA through a React Native postMessage that no merchant app receives.
      */
     @Test
-    fun `appends isWebView alongside isMerchantSDK`() {
+    fun `does not append isWebView`() {
         val uri = CheckoutHandler.appendSdkParams("https://checkout.sezzle.com/?id=abc", "light")
-        assertEquals("true", uri.getQueryParameter("isWebView"))
-        assertEquals("true", uri.getQueryParameter("isMerchantSDK"))
+        assertNull(uri.getQueryParameter("isWebView"))
     }
 
     @Test
@@ -58,7 +57,7 @@ class CheckoutUrlParamsTest {
     fun `null theme omits the param`() {
         val uri = CheckoutHandler.appendSdkParams("https://checkout.sezzle.com/?id=abc", null)
         assertNull(uri.getQueryParameter("theme"))
-        assertEquals("true", uri.getQueryParameter("isMerchantSDK"))
+        assertEquals("true", uri.getQueryParameter("isNativeSDK"))
     }
 
     /**
@@ -77,8 +76,7 @@ class CheckoutUrlParamsTest {
     @Test
     fun `url with no existing query string`() {
         val uri = CheckoutHandler.appendSdkParams("https://checkout.sezzle.com/checkout", "dark")
-        assertEquals("true", uri.getQueryParameter("isWebView"))
-        assertEquals("true", uri.getQueryParameter("isMerchantSDK"))
+        assertEquals("true", uri.getQueryParameter("isNativeSDK"))
         assertEquals("dark", uri.getQueryParameter("theme"))
     }
 
@@ -104,6 +102,6 @@ class CheckoutUrlParamsTest {
         val uri = CheckoutHandler.appendSdkParams("https://checkout.sezzle.com/?id=abc", "dark")
         val reparsed = Uri.parse(uri.toString())
         assertEquals("dark", reparsed.getQueryParameter("theme"))
-        assertEquals("true", reparsed.getQueryParameter("isMerchantSDK"))
+        assertEquals("true", reparsed.getQueryParameter("isNativeSDK"))
     }
 }
