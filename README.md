@@ -17,7 +17,7 @@ Add to your module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.sezzle:sezzle-merchant-sdk:1.2.7")
+    implementation("com.sezzle:sezzle-merchant-sdk:1.3.0")
 }
 ```
 
@@ -29,7 +29,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation(files("libs/sezzle-merchant-sdk-1.2.7.aar"))
+    implementation(files("libs/sezzle-merchant-sdk-1.3.0.aar"))
     implementation("androidx.browser:browser:1.8.0")
 }
 ```
